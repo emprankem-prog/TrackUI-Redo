@@ -1,0 +1,145 @@
+{% extends "layout.html" %}
+{% block title %}Browse Files - TrackUI{% endblock %}
+
+{% block content %}
+<div class="browse-container">
+    <!-- Breadcrumb Navigation -->
+    <div class="browse-breadcrumb">
+        <a href="/browse" class="breadcrumb-item">📁 Downloads</a>
+        {% for crumb in breadcrumbs %}
+        <span class="breadcrumb-sep">/</span>
+        <a href="/browse/{{ crumb.path }}" class="breadcrumb-item">{{ crumb.name }}</a>
+        {% endfor %}
+    </div>
+
+    <!-- Folder Contents -->
+    <div class="browse-grid">
+        {% if parent_path is not none %}
+        <a href="/browse{% if parent_path %}/{{ parent_path }}{% endif %}" class="browse-item browse-folder">
+            <div class="browse-icon">⬆️</div>
+            <div class="browse-name">..</div>
+        </a>
+        {% endif %}
+
+        {% for folder in folders %}
+        <a href="/browse/{{ folder.path }}" class="browse-item browse-folder">
+            <div class="browse-icon">📁</div>
+            <div class="browse-name">{{ folder.name }}</div>
+            <div class="browse-meta">{{ folder.count }} items</div>
+        </a>
+        {% endfor %}
+
+        {% for file in files %}
+        <a href="/media/{{ file.path }}" class="browse-item browse-file" target="_blank">
+            {% if file.type == 'image' %}
+            <div class="browse-preview" style="background-image: url('/media/{{ file.path }}')"></div>
+            {% elif file.type == 'video' %}
+            <div class="browse-icon">🎬</div>
+            {% else %}
+            <div class="browse-icon">📄</div>
+            {% endif %}
+            <div class="browse-name">{{ file.name }}</div>
+            <div class="browse-meta">{{ file.size }}</div>
+        </a>
+        {% endfor %}
+    </div>
+
+    {% if not folders and not files %}
+    <div class="empty-state">
+        <div class="empty-state-icon">📭</div>
+        <h2 class="empty-state-title">No files here</h2>
+        <p class="empty-state-description">This folder is empty or doesn't exist.</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .browse-container {
+        padding: var(--space-lg);
+    }
+
+    .browse-breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: var(--space-xs);
+        padding: var(--space-md);
+        background: var(--bg-secondary);
+        border-radius: var(--border-radius-md);
+        margin-bottom: var(--space-lg);
+        flex-wrap: wrap;
+    }
+
+    .breadcrumb-item {
+        color: var(--accent-primary);
+        text-decoration: none;
+        padding: var(--space-xs) var(--space-sm);
+        border-radius: var(--border-radius-sm);
+        transition: background var(--transition-fast);
+    }
+
+    .breadcrumb-item:hover {
+        background: var(--bg-tertiary);
+    }
+
+    .breadcrumb-sep {
+        color: var(--text-muted);
+    }
+
+    .browse-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: var(--space-md);
+    }
+
+    .browse-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: var(--space-md);
+        background: var(--bg-secondary);
+        border-radius: var(--border-radius-md);
+        text-decoration: none;
+        color: var(--text-primary);
+        transition: all var(--transition-fast);
+        border: 1px solid var(--border-color);
+    }
+
+    .browse-item:hover {
+        background: var(--bg-tertiary);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .browse-icon {
+        font-size: 48px;
+        margin-bottom: var(--space-sm);
+    }
+
+    .browse-preview {
+        width: 100%;
+        aspect-ratio: 1;
+        background-size: cover;
+        background-position: center;
+        border-radius: var(--border-radius-sm);
+        margin-bottom: var(--space-sm);
+    }
+
+    .browse-name {
+        font-size: var(--font-size-sm);
+        text-align: center;
+        word-break: break-all;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+
+    .browse-meta {
+        font-size: var(--font-size-xs);
+        color: var(--text-muted);
+        margin-top: var(--space-xs);
+    }
+</style>
+{% endblock %}

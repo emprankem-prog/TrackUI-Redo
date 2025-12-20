@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="TrackUI - Social Media Archiver & Tracker">
+    <meta name="theme-color" content="#3b82f6">
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="/static/style.css?v={{ range(1000000) | random }}">
+
+    <!-- Theme Initialization (inline to prevent flash) -->
+    <script>
+        (function () {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            // Update button icon when DOM loads
+            document.addEventListener('DOMContentLoaded', function () {
+                const btn = document.getElementById('theme-toggle');
+                if (btn) btn.textContent = savedTheme === 'dark' ? '🌙' : '☀️';
+            });
+        })();
+
+        // Global toggle theme function
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            const btn = document.getElementById('theme-toggle');
+            if (btn) btn.textContent = newTheme === 'dark' ? '🌙' : '☀️';
+        }
+    </script>
+
+    <title>{% block title %}TrackUI{% endblock %}</title>
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container header-content">
+            <a href="/" class="logo">
+                <div class="logo-icon">📦</div>
+                <span>TrackUI</span>
+            </a>
+
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="openModal('add-user-modal')">
+                    <span>➕</span>
+                    Add User
+                </button>
+                <button class="btn btn-secondary" onclick="openModal('import-following-modal')">
+                    <span>📥</span>
+                    Import Following
+                </button>
+                <button class="btn btn-secondary" onclick="syncAllUsers()">
+                    <span>🔄</span>
+                    Sync All
+                </button>
+                <a href="/browse" class="btn btn-secondary">
+                    <span>📂</span>
+                    Browse Files
+                </a>
+                <button class="btn btn-ghost btn-icon" onclick="randomUser()" title="Random User">
+                    🎲
+                </button>
+                <button class="btn btn-ghost btn-icon" onclick="openModal('tags-modal'); loadTags();" title="Tags">
+                    🏷️
+                </button>
+                <button class="btn btn-ghost btn-icon" onclick="toggleTheme()" title="Toggle Theme" id="theme-toggle">
+                    🌙
+                </button>
+                <button class="btn btn-ghost btn-icon"
+                    onclick="openModal('settings-modal'); loadSettings(); loadCookies();" title="Settings">
+                    ⚙️
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Floating Download Button -->
+    <div class="floating-btn">
+        <button class="btn btn-primary" onclick="openModal('downloads-modal')" title="Downloads">
+            📥
+        </button>
+        <span id="queue-badge" class="badge hidden">0</span>
+    </div>
+
+    <!-- Modal Backdrop -->
+    <div id="modal-backdrop" class="modal-backdrop"></div>
+
+    <!-- Add User Modal -->
+    <div id="add-user-modal" class="modal">
+        <div class="modal-header">
+            <h3 class="modal-title">Add User</h3>
+            <button class="modal-close" onclick="closeModal('add-user-modal')">✕</button>
+        </div>
+        <form onsubmit="addUser(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="add-platform">Platform</label>
+                    <select id="add-platform" class="form-select" required onchange="toggleCoomerFields()">
+                        <option value="">Select platform...</option>
+                        <option value="instagram">📸 Instagram</option>
+                        <option value="tiktok">🎵 TikTok</option>
+                        <option value="coomer">💖 Coomer</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="add-username">Username</label>
+                    <input type="text" id="add-username" class="form-input" placeholder="e.g. username123" required>
+                </div>
+                <div id="coomer-service-group" class="form-group hidden">
+                    <label class="form-label" for="add-coomer-service">Service</label>
+                    <select id="add-coomer-service" class="form-select">
+                        <option value="onlyfans">OnlyFans</option>
+                        <option value="fansly">Fansly</option>
+                        <option value="candfans">CandFans</option>
+                        <option value="fantia">Fantia</option>
+                        <option value="gumroad">Gumroad</option>
+                        <option value="patreon">Patreon</option>
+                        <option value="subscribestar">SubscribeStar</option>
+                    </select>
+                    <p class="text-muted" style="font-size: 12px; margin-top: 4px;">
+                        Select the service where this creator is hosted
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('add-user-modal')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add User</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Import Following Modal -->
+    <div id="import-following-modal" class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">📥 Import Instagram Following</h3>
+            <button class="modal-close" onclick="closeModal('import-following-modal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="settings-section">
+                <p class="text-muted mb-md">
+                    Import users you follow on Instagram. Requires Instagram cookies to be set.
+                </p>
+                <button type="button" class="btn btn-primary btn-lg" id="fetch-following-btn" style="width: 100%;">
+                    🔍 Fetch My Following List
+                </button>
+            </div>
+
+            <div id="following-status" class="hidden">
+                <div class="settings-section">
+                    <div class="flex items-center justify-between mb-md">
+                        <h4 class="settings-section-title mb-0">Following List</h4>
+                        <div class="flex gap-sm">
+                            <button class="btn btn-secondary btn-sm" id="select-all-btn">Select All</button>
+                            <button class="btn btn-secondary btn-sm" id="deselect-all-btn">Deselect All</button>
+                        </div>
+                    </div>
+                    <div id="following-list" class="following-list">
+                        <!-- Following users will be loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <div id="following-loading" class="hidden">
+                <div class="flex items-center justify-center p-lg">
+                    <div class="loading-spinner"></div>
+                    <span class="ml-md">Fetching following list...</span>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary"
+                onclick="closeModal('import-following-modal')">Cancel</button>
+            <button type="button" class="btn btn-primary" id="import-selected-btn" disabled>
+                Import Selected (<span id="selected-count">0</span>)
+            </button>
+        </div>
+    </div>
+
+    <!-- Downloads Modal -->
+    <div id="downloads-modal" class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Downloads</h3>
+            <button class="modal-close" onclick="closeModal('downloads-modal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div id="queue-list" class="queue-list">
+                <div class="queue-empty">
+                    <p>📭 No downloads in queue</p>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="clearCompletedDownloads()">Clear Completed</button>
+            <button type="button" class="btn btn-primary" onclick="openModal('external-download-modal')">Download
+                URL</button>
+        </div>
+    </div>
+
+    <!-- External Download Modal -->
+    <div id="external-download-modal" class="modal">
+        <div class="modal-header">
+            <h3 class="modal-title">Download External URL</h3>
+            <button class="modal-close" onclick="closeModal('external-download-modal')">✕</button>
+        </div>
+        <form onsubmit="downloadExternalUrl(event)">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="external-url">URL</label>
+                    <input type="url" id="external-url" class="form-input" placeholder="https://..." required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="external-folder">Folder Name</label>
+                    <input type="text" id="external-folder" class="form-input" placeholder="external" value="external">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary"
+                    onclick="closeModal('external-download-modal')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Download</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Tags Modal -->
+    <div id="tags-modal" class="modal">
+        <div class="modal-header">
+            <h3 class="modal-title">Manage Tags</h3>
+            <button class="modal-close" onclick="closeModal('tags-modal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <form onsubmit="addTag(event)" class="mb-lg">
+                <div class="flex gap-sm items-center">
+                    <input type="text" id="tag-name" class="form-input" placeholder="Tag name" style="flex: 1;">
+                    <input type="color" id="tag-color" value="#3b82f6"
+                        style="width: 50px; height: 38px; border: none; border-radius: 6px; cursor: pointer;">
+                    <button type="submit" class="btn btn-primary">Add</button>
+                </div>
+            </form>
+            <div id="tags-list" class="cookie-list">
+                <p class="text-muted">Loading tags...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tag Assign Modal -->
+    <div id="tag-assign-modal" class="modal">
+        <div class="modal-header">
+            <h3 class="modal-title">Assign Tag</h3>
+            <button class="modal-close" onclick="closeModal('tag-assign-modal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <!-- Dynamic content -->
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Settings</h3>
+            <button class="modal-close" onclick="closeModal('settings-modal')">✕</button>
+        </div>
+        <form onsubmit="saveSettings(event)"
+            style="display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;">
+            <div class="modal-body" style="flex: 1; overflow-y: auto;">
+                <!-- Scheduler Settings -->
+                <div class="settings-section">
+                    <h4 class="settings-section-title">⏰ Auto-Sync Scheduler</h4>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-label">Enable Scheduler</div>
+                            <div class="settings-description">Automatically sync all users on a schedule</div>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="scheduler-enabled">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-label">Sync Time</div>
+                        </div>
+                        <input type="time" id="scheduler-time" class="form-input" style="width: auto;" value="03:00">
+                    </div>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-label">Interval</div>
+                        </div>
+                        <select id="scheduler-interval" class="form-select" style="width: auto;">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly (Mondays)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Download Settings -->
+                <div class="settings-section">
+                    <h4 class="settings-section-title">📥 Downloads</h4>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-label">Max Concurrent Downloads</div>
+                            <div class="settings-description">Number of downloads to run at the same time</div>
+                        </div>
+                        <select id="max-concurrent" class="form-select" style="width: auto;">
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4">4</option>
+                        </select>
+                    </div>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-label">Refresh Profile Avatars</div>
+                            <div class="settings-description">Re-download all profile pictures</div>
+                        </div>
+                        <button class="btn btn-secondary" onclick="refreshAvatars()">
+                            🖼️ Refresh Avatars
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Security Settings -->
+                <div class="settings-section">
+                    <h4 class="settings-section-title">🔐 Security</h4>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-label">Password Protection</div>
+                            <div class="settings-description">Lock the app with a password</div>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="password-enabled" onchange="togglePasswordFields()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="password-fields" style="display: none;">
+                        <div class="form-group">
+                            <label class="form-label" for="app-password">New Password</label>
+                            <input type="password" id="app-password" class="form-input" placeholder="Enter password">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="app-password-confirm">Confirm Password</label>
+                            <input type="password" id="app-password-confirm" class="form-input"
+                                placeholder="Confirm password">
+                        </div>
+                        <button class="btn btn-primary" onclick="savePassword()">Set Password</button>
+                        <button class="btn btn-secondary" onclick="removePassword()">Remove Password</button>
+                    </div>
+
+                    <!-- Auto-Lock -->
+                    <div class="settings-row" style="margin-top: var(--space-md);">
+                        <div>
+                            <div class="settings-label">Auto-Lock</div>
+                            <div class="settings-description">Lock app after inactivity (requires password)</div>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="auto-lock-enabled">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-label">Lock After</div>
+                        </div>
+                        <select id="auto-lock-delay" class="form-select" style="width: auto;">
+                            <option value="1">1 minute</option>
+                            <option value="5">5 minutes</option>
+                            <option value="10">10 minutes</option>
+                            <option value="15">15 minutes</option>
+                            <option value="30">30 minutes</option>
+                        </select>
+                    </div>
+
+                    <!-- Panic Button -->
+                    <div class="settings-row" style="margin-top: var(--space-md);">
+                        <div>
+                            <div class="settings-label">Panic Button</div>
+                            <div class="settings-description">Press <kbd>Esc</kbd> 3x quickly to lock & redirect</div>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="panic-button-enabled" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Telegram Settings -->
+                <div class="settings-section">
+                    <h4 class="settings-section-title">📱 Telegram Notifications</h4>
+                    <div class="form-group">
+                        <label class="form-label" for="telegram-token">Bot Token</label>
+                        <input type="text" id="telegram-token" class="form-input" placeholder="123456789:ABC...">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="telegram-chat-id">Chat ID</label>
+                        <input type="text" id="telegram-chat-id" class="form-input" placeholder="Your chat ID">
+                    </div>
+                </div>
+
+                <!-- Instagram Cookies -->
+                <div class="settings-section">
+                    <h4 class="settings-section-title">🍪 Instagram Cookies</h4>
+                    <div class="upload-zone" onclick="document.getElementById('cookie-upload').click()">
+                        <div class="upload-zone-icon">📤</div>
+                        <p>Click to upload cookies.txt</p>
+                        <input type="file" id="cookie-upload" accept=".txt" onchange="uploadCookie(event)">
+                    </div>
+                    <div id="cookies-list" class="cookie-list mt-md">
+                        <p class="text-muted">Loading cookies...</p>
+                    </div>
+                </div>
+
+                <!-- Backup/Restore -->
+                <div class="settings-section">
+                    <h4 class="settings-section-title">💾 Backup & Restore</h4>
+                    <div class="flex gap-md">
+                        <button type="button" class="btn btn-secondary" onclick="downloadBackup()">
+                            📦 Download Backup
+                        </button>
+                        <label class="btn btn-secondary" style="cursor: pointer;">
+                            📥 Restore Backup
+                            <input type="file" accept=".zip" onchange="restoreBackup(event)" style="display: none;">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Danger Zone -->
+                <div class="settings-section danger-zone">
+                    <h4 class="settings-section-title">⚠️ Danger Zone</h4>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-label">Factory Reset</div>
+                            <div class="settings-description">Delete all data and start fresh</div>
+                        </div>
+                        <button type="button" class="btn btn-danger" onclick="factoryReset()">
+                            Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('settings-modal')">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Media Viewer Modal -->
+    <div id="media-viewer-modal" class="modal modal-xl">
+        <div class="modal-header">
+            <h3 class="modal-title">Media Viewer</h3>
+            <button class="modal-close" onclick="closeMediaViewer()">✕</button>
+        </div>
+        <div class="modal-body" style="display: flex; justify-content: center; align-items: center; background: #000;">
+            <div class="media-viewer-content"></div>
+        </div>
+    </div>
+
+    <!-- Sync Confirmation Modal -->
+    <div id="sync-confirm-modal" class="modal">
+        <div class="modal-header">
+            <h3 class="modal-title">Sync Started</h3>
+            <button class="modal-close" onclick="closeModal('sync-confirm-modal')">✕</button>
+        </div>
+        <div class="modal-body text-center">
+            <div style="font-size: 48px; margin-bottom: 16px;">🚀</div>
+            <p>Download has been added to the queue!</p>
+            <p class="text-muted">Check the Downloads panel for progress.</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary"
+                onclick="closeModal('sync-confirm-modal'); openModal('downloads-modal');">
+                View Downloads
+            </button>
+        </div>
+    </div>
+
+    <!-- First Time Setup Wizard -->
+    <div id="setup-wizard-modal" class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title" id="setup-modal-title">🚀 Welcome to TrackUI</h3>
+        </div>
+        <div class="modal-body">
+            <!-- Step indicators -->
+            <div class="setup-steps">
+                <div class="setup-step active" data-step="1">1</div>
+                <div class="setup-step" data-step="2">2</div>
+                <div class="setup-step" data-step="3">3</div>
+                <div class="setup-step" data-step="4">4</div>
+                <div class="setup-step" data-step="5">5</div>
+                <div class="setup-step" data-step="6">6</div>
+            </div>
+
+            <!-- Step 1: Welcome -->
+            <div class="setup-content" id="setup-step-1">
+                <div style="text-align: center; padding: var(--space-xl) 0;">
+                    <div style="font-size: 72px; margin-bottom: var(--space-lg);">📦</div>
+                    <h2 style="font-size: 28px; margin-bottom: var(--space-md);">Welcome to TrackUI</h2>
+                    <p class="text-muted" style="font-size: 16px; max-width: 400px; margin: 0 auto;">
+                        Your personal social media archiver for Instagram, TikTok, and Coomer content.
+                    </p>
+                    <p class="text-muted" style="margin-top: var(--space-lg);">
+                        Let's get you set up in just a few steps!
+                    </p>
+                </div>
+            </div>
+
+            <!-- Step 2: Restore Backup -->
+            <div class="setup-content hidden" id="setup-step-2">
+                <h4>📦 Restore from Backup</h4>
+                <p class="text-muted mb-md">Have a backup from a previous installation?</p>
+                <div style="text-align: center; padding: var(--space-lg) 0;">
+                    <label class="btn btn-primary btn-lg" style="cursor: pointer;">
+                        📥 Restore Backup
+                        <input type="file" id="setup-backup-file" accept=".zip" style="display: none;"
+                            onchange="setupRestoreBackup(event)">
+                    </label>
+                    <p id="setup-backup-status" class="text-muted mt-md"></p>
+                    <p class="text-muted mt-lg" style="font-size: 14px;">
+                        Or continue to set up fresh →
+                    </p>
+                </div>
+            </div>
+
+            <!-- Step 3: Password (was Step 1) -->
+            <div class="setup-content hidden" id="setup-step-3">
+                <h4>🔐 Password Protection</h4>
+                <p class="text-muted mb-md">Protect your app with a PIN/password (optional)</p>
+                <div class="form-group">
+                    <input type="password" id="setup-password" class="form-input"
+                        placeholder="Enter password (leave empty to skip)">
+                </div>
+                <div class="form-group">
+                    <input type="password" id="setup-password-confirm" class="form-input"
+                        placeholder="Confirm password">
+                </div>
+                <div class="settings-row" style="margin-top: var(--space-md);">
+                    <div>
+                        <div class="settings-label">Auto-Lock</div>
+                        <div class="settings-description">Lock app after inactivity</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="setup-auto-lock">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="form-group" style="margin-top: var(--space-sm);">
+                    <label class="form-label">Lock after</label>
+                    <select id="setup-auto-lock-delay" class="form-select">
+                        <option value="5">5 minutes</option>
+                        <option value="10">10 minutes</option>
+                        <option value="15">15 minutes</option>
+                        <option value="30">30 minutes</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Step 4: Telegram -->
+            <div class="setup-content hidden" id="setup-step-4">
+                <h4>📱 Telegram Notifications</h4>
+                <p class="text-muted mb-md">Get notifications about downloads (optional)</p>
+                <div class="form-group">
+                    <label class="form-label">Bot Token</label>
+                    <input type="text" id="setup-telegram-token" class="form-input" placeholder="123456789:ABC...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Chat ID</label>
+                    <input type="text" id="setup-telegram-chat" class="form-input" placeholder="Your chat ID">
+                </div>
+            </div>
+
+            <!-- Step 5: Scheduler -->
+            <div class="setup-content hidden" id="setup-step-5">
+                <h4>⏰ Auto-Sync Schedule</h4>
+                <p class="text-muted mb-md">Automatically sync all users on a schedule (optional)</p>
+                <div class="settings-row" style="margin-bottom: var(--space-md);">
+                    <div>
+                        <div class="settings-label">Enable Scheduler</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="setup-scheduler-enabled">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Sync Time</label>
+                    <input type="time" id="setup-scheduler-time" class="form-input" value="03:00">
+                </div>
+            </div>
+
+            <!-- Step 6: Instagram Cookie -->
+            <div class="setup-content hidden" id="setup-step-6">
+                <h4>🍪 Instagram Cookies</h4>
+                <p class="text-muted mb-md">Upload cookies.txt to download from Instagram (optional)</p>
+                <div class="upload-zone" onclick="document.getElementById('setup-cookie-upload').click()">
+                    <div class="upload-zone-icon">📤</div>
+                    <p>Click to upload cookies.txt</p>
+                    <input type="file" id="setup-cookie-upload" accept=".txt" style="display:none"
+                        onchange="setupCookieSelected(event)">
+                </div>
+                <p id="setup-cookie-status" class="text-muted mt-sm"></p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="setup-prev-btn" onclick="setupPrevStep()"
+                style="display:none">Back</button>
+            <button type="button" class="btn btn-secondary" onclick="skipSetup()">Skip All</button>
+            <button type="button" class="btn btn-primary" id="setup-next-btn" onclick="setupNextStep()">Next</button>
+        </div>
+    </div>
+
+    <style>
+        .setup-steps {
+            display: flex;
+            justify-content: center;
+            gap: var(--space-md);
+            margin-bottom: var(--space-xl);
+        }
+
+        .setup-step {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: all var(--transition-fast);
+        }
+
+        .setup-step.active {
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        .setup-step.completed {
+            background: var(--accent-success);
+            color: white;
+        }
+
+        .setup-content {
+            min-height: 200px;
+        }
+
+        .setup-content h4 {
+            margin-bottom: var(--space-sm);
+        }
+    </style>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="/static/app.js?v={{ range(1000000) | random }}"></script>
+</body>
+
+</html>

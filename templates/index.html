@@ -1,0 +1,152 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard - TrackUI{% endblock %}
+
+{% block content %}
+<!-- Filter Bar -->
+<div class="filter-bar">
+    <div class="search-input">
+        <input type="text" id="filter-search" class="form-input" placeholder="Search users...">
+    </div>
+    <select id="filter-platform" class="form-select">
+        <option value="">All Platforms</option>
+        <option value="instagram">📸 Instagram</option>
+        <option value="tiktok">🎵 TikTok</option>
+        <option value="coomer">💖 Coomer</option>
+    </select>
+    <select id="filter-tag" class="form-select">
+        <option value="">All Tags</option>
+        {% for tag in tags %}
+        <option value="{{ tag.id }}">{{ tag.name }}</option>
+        {% endfor %}
+    </select>
+</div>
+
+<!-- User Grid -->
+{% if users %}
+<div class="user-grid">
+    {% for user in users %}
+    <div class="card user-card" data-user-id="{{ user.id }}" data-platform="{{ user.platform }}"
+        data-username="{{ user.username }}" data-display-name="{{ user.display_name or '' }}"
+        data-tags="{% for tag in user.tags %}{{ tag.id }}{% if not loop.last %},{% endif %}{% endfor %}">
+
+        <!-- Banner -->
+        <div class="user-card-banner {{ user.platform }}"></div>
+
+        <!-- Avatar -->
+        {% if user.profile_picture %}
+        <img src="{{ user.profile_picture }}" alt="{{ user.username }}" class="user-card-avatar">
+        {% else %}
+        <div class="user-card-avatar">
+            {% if user.platform == 'instagram' %}📸{% elif user.platform == 'tiktok' %}🎵{% else %}💖{% endif %}
+        </div>
+        {% endif %}
+
+        <div class="card-body user-card-content">
+            <!-- Name & Username - for Coomer, extract just the username part -->
+            {% if user.platform == 'coomer' and '/' in user.username %}
+            {% set display_name = user.username.split('/')[1] %}
+            {% else %}
+            {% set display_name = user.username %}
+            {% endif %}
+            <h3 class="user-card-name">{{ user.display_name or display_name }}</h3>
+            <p class="user-card-username">@{{ display_name }}</p>
+
+            <!-- Platform Badge -->
+            <span class="user-card-platform">
+                {% if user.platform == 'instagram' %}
+                📸 Instagram
+                {% elif user.platform == 'tiktok' %}
+                🎵 TikTok
+                {% else %}
+                💖 Coomer
+                {% endif %}
+            </span>
+
+            <!-- Stats -->
+            <div class="user-card-stats">
+                <div class="user-card-stat">
+                    <div class="user-card-stat-value">{{ user.stats.posts }}</div>
+                    <div class="user-card-stat-label">Posts</div>
+                </div>
+                <div class="user-card-stat">
+                    <div class="user-card-stat-value">{{ user.stats.videos }}</div>
+                    <div class="user-card-stat-label">Videos</div>
+                </div>
+                <div class="user-card-stat">
+                    <div class="user-card-stat-value">{{ user.stats.size }}</div>
+                    <div class="user-card-stat-label">Size</div>
+                </div>
+            </div>
+
+            <!-- Tags -->
+            <div class="user-card-tags">
+                {% for tag in user.tags %}
+                <span class="tag"
+                    style="background-color: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}">
+                    {{ tag.name }}
+                </span>
+                {% endfor %}
+                <button class="btn btn-ghost" style="font-size: 12px; padding: 2px 8px;"
+                    onclick="event.stopPropagation(); loadTags(); openTagAssignModal({{ user.id }}, [{% for tag in user.tags %}{{ tag.id }}{% if not loop.last %},{% endif %}{% endfor %}])">
+                    +
+                </button>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="card-footer user-card-actions">
+            <a href="/user/{{ user.platform }}/{{ user.username }}" class="btn btn-secondary">
+                👁️ View
+            </a>
+            <button class="btn btn-primary"
+                onclick="event.stopPropagation(); syncUser({{ user.id }}, '{{ user.username }}')">
+                🔄 Sync
+            </button>
+            {% if user.platform == 'instagram' %}
+            <a href="https://instagram.com/{{ display_name }}" target="_blank" class="btn btn-ghost btn-icon"
+                title="Open Instagram" onclick="event.stopPropagation()">
+                🔗
+            </a>
+            {% elif user.platform == 'tiktok' %}
+            <a href="https://tiktok.com/@{{ display_name }}" target="_blank" class="btn btn-ghost btn-icon"
+                title="Open TikTok" onclick="event.stopPropagation()">
+                🔗
+            </a>
+            {% elif user.platform == 'coomer' %}
+            <a href="https://coomer.st/{{ user.username.replace('/', '/user/') }}" target="_blank"
+                class="btn btn-ghost btn-icon" title="Open Coomer" onclick="event.stopPropagation()">
+                🔗
+            </a>
+            {% endif %}
+            <a href="/api/users/{{ user.id }}/download-zip" class="btn btn-ghost btn-icon" title="Download as ZIP"
+                onclick="event.stopPropagation()">
+                📦
+            </a>
+            <button class="btn btn-ghost btn-icon"
+                onclick="event.stopPropagation(); deleteUser({{ user.id }}, '{{ user.username }}')" title="Delete">
+                🗑️
+            </button>
+        </div>
+
+        <!-- Last Sync -->
+        {% if user.last_sync %}
+        <div style="text-align: center; padding: 8px; font-size: 12px; color: var(--text-muted);">
+            Last sync: {{ user.last_sync }}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<!-- Empty State -->
+<div class="empty-state">
+    <div class="empty-state-icon">📭</div>
+    <h2 class="empty-state-title">No users tracked yet</h2>
+    <p class="empty-state-description">Add your first user to start archiving their content.</p>
+    <button class="btn btn-primary btn-lg" onclick="openModal('add-user-modal')">
+        ➕ Add First User
+    </button>
+</div>
+{% endif %}
+{% endblock %}
