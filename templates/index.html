@@ -20,6 +20,23 @@
         <option value="{{ tag.id }}">{{ tag.name }}</option>
         {% endfor %}
     </select>
+    <div class="view-toggle">
+        <button class="view-toggle-btn active" data-view="grid" onclick="setViewMode('grid')" title="Grid View">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+        </button>
+        <button class="view-toggle-btn" data-view="list" onclick="setViewMode('list')" title="List View">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="3" y="4" width="18" height="4" rx="1" />
+                <rect x="3" y="10" width="18" height="4" rx="1" />
+                <rect x="3" y="16" width="18" height="4" rx="1" />
+            </svg>
+        </button>
+    </div>
 </div>
 
 <!-- User Grid -->
@@ -31,7 +48,13 @@
         data-tags="{% for tag in user.tags %}{{ tag.id }}{% if not loop.last %},{% endif %}{% endfor %}">
 
         <!-- Banner -->
+        {% if user.banner_url %}
+        <div class="user-card-banner {{ user.platform }}"
+            style="background-image: url('{{ user.banner_url }}'); background-size: cover; background-position: center;">
+        </div>
+        {% else %}
         <div class="user-card-banner {{ user.platform }}"></div>
+        {% endif %}
 
         <!-- Avatar -->
         {% if user.profile_picture %}

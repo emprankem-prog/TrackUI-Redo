@@ -77,6 +77,9 @@
                 <button class="btn btn-ghost btn-icon" onclick="openModal('tags-modal'); loadTags();" title="Tags">
                     🏷️
                 </button>
+                <button class="btn btn-ghost btn-icon" onclick="openModal('stats-modal'); loadStats();" title="Stats">
+                    📊
+                </button>
                 <button class="btn btn-ghost btn-icon" onclick="toggleTheme()" title="Toggle Theme" id="theme-toggle">
                     🌙
                 </button>
@@ -271,6 +274,165 @@
             <!-- Dynamic content -->
         </div>
     </div>
+
+    <!-- Stats Modal -->
+    <div id="stats-modal" class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">📊 Storage Statistics</h3>
+            <button class="modal-close" onclick="closeModal('stats-modal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <!-- Summary Cards -->
+            <div class="stats-summary">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-total-storage">--</div>
+                    <div class="stat-label">Total Storage</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-total-files">--</div>
+                    <div class="stat-label">Total Files</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-total-users">--</div>
+                    <div class="stat-label">Tracked Profiles</div>
+                </div>
+            </div>
+
+            <!-- Platform Chart -->
+            <div class="settings-section">
+                <h4 class="settings-section-title">Storage by Platform</h4>
+                <div id="platform-chart" class="platform-chart">
+                    <p class="text-muted">Loading...</p>
+                </div>
+            </div>
+
+            <!-- Profile List -->
+            <div class="settings-section">
+                <h4 class="settings-section-title">Tracked Profiles</h4>
+                <div id="stats-user-list" class="stats-user-list">
+                    <p class="text-muted">Loading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--space-md);
+            margin-bottom: var(--space-lg);
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--border-radius-lg);
+            padding: var(--space-lg);
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent-primary);
+        }
+
+        .stat-label {
+            font-size: var(--font-size-sm);
+            color: var(--text-muted);
+            margin-top: var(--space-xs);
+        }
+
+        .platform-chart {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+        }
+
+        .platform-bar {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+        }
+
+        .platform-bar-label {
+            width: 100px;
+            font-weight: 500;
+        }
+
+        .platform-bar-track {
+            flex: 1;
+            height: 24px;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .platform-bar-fill {
+            height: 100%;
+            border-radius: 12px;
+            transition: width 0.5s ease;
+        }
+
+        .platform-bar-fill.instagram {
+            background: linear-gradient(90deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+        }
+
+        .platform-bar-fill.tiktok {
+            background: linear-gradient(90deg, #25f4ee, #fe2c55);
+        }
+
+        .platform-bar-fill.coomer {
+            background: linear-gradient(90deg, #ff6b9d, #c44569);
+        }
+
+        .platform-bar-size {
+            width: 80px;
+            text-align: right;
+            font-size: var(--font-size-sm);
+            color: var(--text-muted);
+        }
+
+        .stats-user-list {
+            max-height: 300px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-xs);
+        }
+
+        .stats-user-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-md);
+            padding: var(--space-sm) var(--space-md);
+            background: var(--bg-tertiary);
+            border-radius: var(--border-radius-md);
+        }
+
+        .stats-user-item:hover {
+            background: var(--bg-elevated);
+        }
+
+        .stats-user-platform {
+            font-size: 18px;
+        }
+
+        .stats-user-name {
+            flex: 1;
+            font-weight: 500;
+        }
+
+        .stats-user-files {
+            font-size: var(--font-size-sm);
+            color: var(--text-muted);
+        }
+
+        .stats-user-size {
+            font-weight: 600;
+            color: var(--accent-primary);
+        }
+    </style>
 
     <!-- Settings Modal -->
     <div id="settings-modal" class="modal modal-lg">

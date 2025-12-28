@@ -22,6 +22,7 @@ from flask import (
     send_from_directory, redirect, url_for, Response, session
 )
 import hashlib
+import requests
 
 # Optional Telegram Bot
 try:
@@ -40,6 +41,7 @@ DB_PATH = DATA_DIR / "trackui.db"
 DOWNLOADS_DIR = DATA_DIR / "downloads"
 COOKIES_DIR = DATA_DIR / "cookies"
 AVATARS_DIR = DATA_DIR / "avatars"
+BANNERS_DIR = DATA_DIR / "banners"
 
 # Avatar download settings
 TIMEOUT_THRESHOLD = 60
@@ -500,8 +502,38 @@ def download_avatar_with_gallery_dl(username, platform='instagram'):
             url = f"https://www.instagram.com/{username}/avatar/"
         elif platform == 'tiktok':
             url = f"https://www.tiktok.com/@{username}"
+        elif platform == 'coomer':
+            # Coomer avatars use direct URL: https://img.coomer.st/icons/{service}/{username}
+            # Username format is "service/username" e.g. "onlyfans/teamfootmodelsco"
+            if '/' in username:
+                service, user = username.split('/', 1)
+                avatar_url = f"https://img.coomer.st/icons/{service}/{user}"
+                
+                # Download directly via HTTP
+                try:
+                    headers = {'User-Agent': USER_AGENTS[0]}
+                    response = requests.get(avatar_url, headers=headers, timeout=10)
+                    if response.status_code == 200 and response.content:
+                        # Determine extension from content-type
+                        content_type = response.headers.get('content-type', 'image/jpeg')
+                        ext = '.jpg'
+                        if 'png' in content_type:
+                            ext = '.png'
+                        elif 'webp' in content_type:
+                            ext = '.webp'
+                        elif 'gif' in content_type:
+                            ext = '.gif'
+                        
+                        # Save avatar with safe filename (replace / with _)
+                        safe_username = username.replace('/', '_')
+                        avatar_path = AVATARS_DIR / f"{platform}_{safe_username}{ext}"
+                        with open(avatar_path, 'wb') as f:
+                            f.write(response.content)
+                        return str(avatar_path)
+                except Exception as e:
+                    print(f"Failed to download Coomer avatar for {username}: {e}")
+            return None
         else:
-            # Coomer doesn't have a standard avatar endpoint
             return None
         
         # Use gallery-dl to get avatar information
@@ -662,17 +694,86 @@ def download_avatar_with_gallery_dl(username, platform='instagram'):
 
 def get_avatar_url(username, platform):
     """Get avatar URL for a user - returns local path if cached, or downloads it."""
+    # For Coomer, convert username with slash to safe filename
+    safe_username = username.replace('/', '_') if platform == 'coomer' else username
+    
     # Check for existing avatar
     for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
-        avatar_path = AVATARS_DIR / f"{platform}_{username}{ext}"
+        avatar_path = AVATARS_DIR / f"{platform}_{safe_username}{ext}"
         if avatar_path.exists():
-            return f'/avatars/{platform}_{username}{ext}'
+            return f'/avatars/{platform}_{safe_username}{ext}'
     
     # Try to download avatar in background
     def download_bg():
         download_avatar_with_gallery_dl(username, platform)
     
     threading.Thread(target=download_bg, daemon=True).start()
+    
+    return None
+
+# =============================================================================
+# Banner Support (Coomer)
+# =============================================================================
+
+def get_banner_url(username, platform):
+    """Get banner URL for a user - currently only supports Coomer."""
+    if platform != 'coomer':
+        return None
+    
+    # For Coomer, convert username with slash to safe filename
+    safe_username = username.replace('/', '_')
+    
+    # Check for existing banner
+    for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+        banner_path = BANNERS_DIR / f"{platform}_{safe_username}{ext}"
+        if banner_path.exists():
+            return f'/banners/{platform}_{safe_username}{ext}'
+    
+    # Try to download banner in background
+    def download_bg():
+        download_coomer_banner(username)
+    
+    threading.Thread(target=download_bg, daemon=True).start()
+    
+    return None
+
+def download_coomer_banner(username):
+    """Download Coomer banner from img.coomer.st/banners/{service}/{username}"""
+    try:
+        BANNERS_DIR.mkdir(exist_ok=True)
+        
+        # Check if banner already exists
+        safe_username = username.replace('/', '_')
+        for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif']:
+            existing = BANNERS_DIR / f"coomer_{safe_username}{ext}"
+            if existing.exists():
+                return str(existing)
+        
+        # Username format is "service/username" e.g. "onlyfans/teamfootmodelsco"
+        if '/' in username:
+            service, user = username.split('/', 1)
+            banner_url = f"https://img.coomer.st/banners/{service}/{user}"
+            
+            # Download directly via HTTP
+            headers = {'User-Agent': USER_AGENTS[0]}
+            response = requests.get(banner_url, headers=headers, timeout=10)
+            if response.status_code == 200 and response.content:
+                # Determine extension from content-type
+                content_type = response.headers.get('content-type', 'image/jpeg')
+                ext = '.jpg'
+                if 'png' in content_type:
+                    ext = '.png'
+                elif 'webp' in content_type:
+                    ext = '.webp'
+                elif 'gif' in content_type:
+                    ext = '.gif'
+                
+                banner_path = BANNERS_DIR / f"coomer_{safe_username}{ext}"
+                with open(banner_path, 'wb') as f:
+                    f.write(response.content)
+                return str(banner_path)
+    except Exception as e:
+        print(f"Failed to download Coomer banner for {username}: {e}")
     
     return None
 
@@ -1487,6 +1588,9 @@ def index():
         # Get avatar URL if not set
         if not user.get('profile_picture'):
             user['profile_picture'] = get_avatar_url(user['username'], user['platform'])
+        
+        # Get banner URL for Coomer users
+        user['banner_url'] = get_banner_url(user['username'], user['platform'])
     
     # Get all tags for filter
     cursor.execute('SELECT * FROM tags ORDER BY name')
@@ -2446,6 +2550,93 @@ def api_setup_complete():
     set_setting('setup_completed', 'true')
     return jsonify({'success': True})
 
+# Stats API
+@app.route('/api/stats')
+def api_stats():
+    """Get storage and profile statistics"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Get all users
+    cursor.execute('SELECT id, username, platform, display_name FROM users ORDER BY platform, username')
+    users = cursor.fetchall()
+    conn.close()
+    
+    # Calculate storage by platform and user
+    platform_storage = {'instagram': 0, 'tiktok': 0, 'coomer': 0}
+    user_storage = []
+    total_files = 0
+    
+    for user in users:
+        username = user['username']
+        platform = user['platform']
+        
+        # Calculate user's storage
+        user_dir = DOWNLOADS_DIR / platform / username
+        user_size = 0
+        user_files = 0
+        
+        if user_dir.exists():
+            for root, dirs, files in os.walk(user_dir):
+                for f in files:
+                    try:
+                        file_path = Path(root) / f
+                        size = file_path.stat().st_size
+                        user_size += size
+                        user_files += 1
+                    except:
+                        pass
+        
+        platform_storage[platform] = platform_storage.get(platform, 0) + user_size
+        total_files += user_files
+        
+        user_storage.append({
+            'id': user['id'],
+            'username': username,
+            'platform': platform,
+            'display_name': user['display_name'],
+            'size': user_size,
+            'size_formatted': format_size(user_size),
+            'files': user_files
+        })
+    
+    # Calculate total and format
+    total_storage = sum(platform_storage.values())
+    
+    # Format platform storage
+    platforms = []
+    for platform, size in platform_storage.items():
+        if size > 0:
+            platforms.append({
+                'name': platform,
+                'size': size,
+                'size_formatted': format_size(size),
+                'percentage': round((size / total_storage * 100) if total_storage > 0 else 0, 1)
+            })
+    
+    # Sort users by size (largest first)
+    user_storage.sort(key=lambda x: x['size'], reverse=True)
+    
+    return jsonify({
+        'total_storage': total_storage,
+        'total_storage_formatted': format_size(total_storage),
+        'total_files': total_files,
+        'total_users': len(users),
+        'platforms': platforms,
+        'users': user_storage
+    })
+
+def format_size(size_bytes):
+    """Format bytes to human readable string"""
+    if size_bytes >= 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024*1024*1024):.2f} GB"
+    elif size_bytes >= 1024 * 1024:
+        return f"{size_bytes / (1024*1024):.1f} MB"
+    elif size_bytes >= 1024:
+        return f"{size_bytes / 1024:.0f} KB"
+    else:
+        return f"{size_bytes} B"
+
 # Backup/Restore API
 @app.route('/api/backup', methods=['GET'])
 def api_backup():
@@ -2556,6 +2747,11 @@ def serve_media(filepath):
 def serve_avatar(filename):
     """Serve avatar files"""
     return send_from_directory(str(AVATARS_DIR), filename)
+
+@app.route('/banners/<path:filename>')
+def serve_banner(filename):
+    """Serve banner files"""
+    return send_from_directory(str(BANNERS_DIR), filename)
 
 # Likes/Favorites API
 @app.route('/api/likes', methods=['GET', 'POST'])

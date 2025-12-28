@@ -33,13 +33,40 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
     initTheme();
     checkFirstTimeSetup();
-
-    // Register service worker for PWA
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js')
-            .catch(err => console.log('SW registration failed:', err));
-    }
+    initViewMode();
 });
+
+// View Mode (Grid/List)
+function initViewMode() {
+    const savedMode = localStorage.getItem('dashboard_view_mode') || 'grid';
+    setViewMode(savedMode);
+}
+
+function setViewMode(mode) {
+    const grid = document.querySelector('.user-grid');
+    if (!grid) return;
+
+    // Update grid class
+    if (mode === 'list') {
+        grid.classList.add('list-view');
+    } else {
+        grid.classList.remove('list-view');
+    }
+
+    // Update toggle buttons
+    document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === mode);
+    });
+
+    // Save preference
+    localStorage.setItem('dashboard_view_mode', mode);
+}
+
+// Register service worker for PWA
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+        .catch(err => console.log('SW registration failed:', err));
+}
 
 // =============================================================================
 // Theme Toggle
@@ -1657,6 +1684,57 @@ async function factoryReset() {
 // =============================================================================
 // Media Viewer
 // =============================================================================
+
+// =============================================================================
+// Storage Stats
+// =============================================================================
+
+async function loadStats() {
+    try {
+        const response = await fetch('/api/stats');
+        const data = await response.json();
+
+        // Update summary cards
+        document.getElementById('stat-total-storage').textContent = data.total_storage_formatted;
+        document.getElementById('stat-total-files').textContent = data.total_files.toLocaleString();
+        document.getElementById('stat-total-users').textContent = data.total_users;
+
+        // Render platform chart
+        const chartContainer = document.getElementById('platform-chart');
+        if (data.platforms.length === 0) {
+            chartContainer.innerHTML = '<p class="text-muted">No data yet</p>';
+        } else {
+            const platformIcons = { instagram: '📸', tiktok: '🎵', coomer: '💖' };
+            chartContainer.innerHTML = data.platforms.map(p => `
+                <div class="platform-bar">
+                    <div class="platform-bar-label">${platformIcons[p.name] || ''} ${p.name}</div>
+                    <div class="platform-bar-track">
+                        <div class="platform-bar-fill ${p.name}" style="width: ${p.percentage}%"></div>
+                    </div>
+                    <div class="platform-bar-size">${p.size_formatted}</div>
+                </div>
+            `).join('');
+        }
+
+        // Render user list
+        const userList = document.getElementById('stats-user-list');
+        if (data.users.length === 0) {
+            userList.innerHTML = '<p class="text-muted">No tracked profiles yet</p>';
+        } else {
+            const platformIcons = { instagram: '📸', tiktok: '🎵', coomer: '💖' };
+            userList.innerHTML = data.users.map(u => `
+                <a href="/user/${u.platform}/${u.username}" class="stats-user-item">
+                    <span class="stats-user-platform">${platformIcons[u.platform] || '📁'}</span>
+                    <span class="stats-user-name">${u.display_name || u.username}</span>
+                    <span class="stats-user-files">${u.files} files</span>
+                    <span class="stats-user-size">${u.size_formatted}</span>
+                </a>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('Failed to load stats:', error);
+    }
+}
 
 function initLazyLoading() {
     const images = document.querySelectorAll('.media-item img[data-src]');

@@ -137,7 +137,7 @@ img {
    ============================================================================= */
 
 .container {
-    max-width: 1400px;
+    max-width: 100%;
     margin: 0 auto;
     padding: 0 var(--space-lg);
 }
@@ -368,6 +368,21 @@ img {
     padding: var(--space-md);
     border-top: 1px solid var(--border-color);
     background: var(--bg-tertiary);
+}
+
+/* User Card Actions */
+.user-card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-lg);
+}
+
+.user-card-actions .btn {
+    flex: 0 0 auto;
+    padding: var(--space-xs) var(--space-sm);
+    font-size: var(--font-size-sm);
 }
 
 /* User Card */
@@ -1709,4 +1724,145 @@ img {
 #fetch-following-btn:disabled {
     opacity: 0.7;
     cursor: wait;
+}
+
+/* =============================================================================
+   Filter Bar
+   ============================================================================= */
+
+.filter-bar {
+    display: flex;
+    gap: var(--space-md);
+    align-items: center;
+    margin-bottom: var(--space-lg);
+    flex-wrap: wrap;
+}
+
+.filter-bar .search-input {
+    flex: 1;
+    min-width: 200px;
+}
+
+.filter-bar .form-select {
+    width: auto;
+    min-width: 140px;
+}
+
+/* View Toggle */
+.view-toggle {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius-md);
+    padding: 3px;
+}
+
+.view-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: transparent;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all var(--transition-fast);
+}
+
+.view-toggle-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-elevated);
+}
+
+.view-toggle-btn.active {
+    color: var(--accent-primary);
+    background: var(--bg-secondary);
+}
+
+/* =============================================================================
+   User Grid / List Layout
+   ============================================================================= */
+
+.user-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-lg);
+}
+
+/* List View Mode */
+.user-grid.list-view {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.user-grid.list-view .user-card {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: var(--space-md);
+    gap: var(--space-md);
+}
+
+.user-grid.list-view .user-card-banner {
+    display: none;
+}
+
+.user-grid.list-view .user-card-avatar {
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.user-grid.list-view .user-card-content {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex: 1;
+    gap: var(--space-md);
+    padding: 0;
+    padding-top: 0;
+    text-align: left;
+}
+
+.user-grid.list-view .user-card-name {
+    font-size: var(--font-size-md);
+    margin: 0;
+}
+
+.user-grid.list-view .user-card-username {
+    margin: 0;
+    font-size: var(--font-size-sm);
+}
+
+.user-grid.list-view .user-card-platform {
+    margin: 0;
+}
+
+.user-grid.list-view .user-card-stats {
+    border: none;
+    padding: 0;
+    justify-content: flex-start;
+    gap: var(--space-lg);
+}
+
+.user-grid.list-view .user-card-tags {
+    display: none;
+}
+
+.user-grid.list-view .user-card-actions {
+    padding: 0;
+    gap: var(--space-xs);
+}
+
+.user-grid.list-view .user-card-actions .btn {
+    flex: 0;
+    padding: var(--space-xs) var(--space-sm);
 }
