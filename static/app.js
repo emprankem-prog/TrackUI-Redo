@@ -1695,14 +1695,14 @@ function openMediaViewer(src, type) {
 
     if (type === 'video') {
         container.innerHTML = `
-        < video controls autoplay style = "max-width: 100%; max-height: 80vh;" >
-            <source src="${src}" type="video/mp4">
+            <video controls autoplay style="max-width: 100%; max-height: 80vh;">
+                <source src="${src}" type="video/mp4">
             </video>
-    `;
+        `;
     } else {
         container.innerHTML = `
-        < img src = "${src}" style = "max-width: 100%; max-height: 80vh; object-fit: contain;" >
-            `;
+            <img src="${src}" style="max-width: 100%; max-height: 80vh; object-fit: contain;">
+        `;
     }
 
     openModal('media-viewer-modal');
