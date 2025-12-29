@@ -1771,6 +1771,16 @@ function openMediaViewer(src, type) {
 
     if (!modal || !container) return;
 
+    // Stop any currently playing video first
+    const existingVideo = container.querySelector('video');
+    if (existingVideo) {
+        existingVideo.pause();
+        existingVideo.src = '';
+    }
+
+    // Clear container before adding new content
+    container.innerHTML = '';
+
     if (type === 'video') {
         container.innerHTML = `
             <video controls autoplay style="max-width: 100%; max-height: 80vh;">
