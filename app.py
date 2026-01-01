@@ -330,12 +330,22 @@ def run_download(job):
             url = f'https://www.instagram.com/{username}/'
     
     elif platform == 'tiktok':
+        # Add TikTok cookies if available
+        cookie_file = get_default_tiktok_cookie()
+        if cookie_file:
+            cmd.extend(['--cookies', cookie_file])
+        
         if job.get('url'):
             url = job['url']
         else:
             url = f'https://www.tiktok.com/@{username}'
     
     elif platform == 'coomer':
+        # Add Coomer cookies if available
+        cookie_file = get_default_coomer_cookie()
+        if cookie_file:
+            cmd.extend(['--cookies', cookie_file])
+        
         if job.get('url'):
             # Replace old domain with new one
             url = job['url'].replace('coomer.su', 'coomer.st')
@@ -376,6 +386,7 @@ def run_download(job):
         files_count = 0
         last_activity = time.time()
         timeout_minutes = 10
+        error_lines = []  # Collect error output for debugging
         
         for line in iter(process.stdout.readline, ''):
             if job['status'] == 'paused':
@@ -388,6 +399,13 @@ def run_download(job):
             
             # Parse progress from gallery-dl output
             if line:
+                # Collect error lines for debugging
+                if 'error' in line.lower() or 'Error' in line or 'failed' in line.lower() or 'HTTPError' in line:
+                    error_lines.append(line)
+                    # Keep only last 5 error lines
+                    if len(error_lines) > 5:
+                        error_lines.pop(0)
+                
                 # Check for file download
                 if 'Downloading' in line or '.jpg' in line or '.mp4' in line or '.png' in line:
                     files_count += 1
@@ -420,7 +438,20 @@ def run_download(job):
             update_user_last_sync(username, platform)
         else:
             job['status'] = 'failed'
-            job['message'] = f'Failed with exit code {process.returncode}'
+            # Store error log and provide more helpful message
+            if error_lines:
+                job['error_log'] = '\n'.join(error_lines)
+                last_error = error_lines[-1][:100]
+                job['message'] = f'Failed (exit {process.returncode}): {last_error}'
+            else:
+                # Common exit codes explanation
+                error_desc = {
+                    1: 'General error',
+                    2: 'Command line syntax error',
+                    4: 'No files found / access denied',
+                    8: 'Connection error'
+                }.get(process.returncode, 'Unknown error')
+                job['message'] = f'Failed: {error_desc} (exit code {process.returncode})'
         
     except Exception as e:
         job['status'] = 'failed'
@@ -475,6 +506,38 @@ def get_default_instagram_cookie():
     
     # Fallback: find first cookie file
     cookie_dir = COOKIES_DIR / 'instagram'
+    for f in cookie_dir.glob('*.txt'):
+        return str(f)
+    
+    return None
+
+def get_default_tiktok_cookie():
+    """Get path to default TikTok cookie file"""
+    default_cookie = get_setting('default_tiktok_cookie', '')
+    if default_cookie:
+        cookie_path = COOKIES_DIR / 'tiktok' / default_cookie
+        if cookie_path.exists():
+            return str(cookie_path)
+    
+    # Fallback: find first cookie file
+    cookie_dir = COOKIES_DIR / 'tiktok'
+    cookie_dir.mkdir(parents=True, exist_ok=True)
+    for f in cookie_dir.glob('*.txt'):
+        return str(f)
+    
+    return None
+
+def get_default_coomer_cookie():
+    """Get path to default Coomer cookie file"""
+    default_cookie = get_setting('default_coomer_cookie', '')
+    if default_cookie:
+        cookie_path = COOKIES_DIR / 'coomer' / default_cookie
+        if cookie_path.exists():
+            return str(cookie_path)
+    
+    # Fallback: find first cookie file
+    cookie_dir = COOKIES_DIR / 'coomer'
+    cookie_dir.mkdir(parents=True, exist_ok=True)
     for f in cookie_dir.glob('*.txt'):
         return str(f)
     
@@ -2376,11 +2439,13 @@ def api_download():
 # Cookie Management API
 @app.route('/api/cookies', methods=['GET'])
 def api_cookies_list():
-    """List Instagram cookie files"""
-    cookie_dir = COOKIES_DIR / 'instagram'
+    """List cookie files for a platform"""
+    platform = request.args.get('platform', 'instagram')
+    cookie_dir = COOKIES_DIR / platform
+    cookie_dir.mkdir(parents=True, exist_ok=True)
     cookies = []
     
-    default_cookie = get_setting('default_instagram_cookie', '')
+    default_cookie = get_setting(f'default_{platform}_cookie', '')
     
     for f in cookie_dir.glob('*.txt'):
         cookies.append({
@@ -2402,32 +2467,37 @@ def api_cookies_upload():
     if not file.filename:
         return jsonify({'error': 'No file selected'}), 400
     
+    platform = request.form.get('platform', 'instagram')
+    
     # Sanitize filename
     filename = file.filename
     if not filename.endswith('.txt'):
         filename += '.txt'
     
     # Save file
-    cookie_path = COOKIES_DIR / 'instagram' / filename
+    cookie_dir = COOKIES_DIR / platform
+    cookie_dir.mkdir(parents=True, exist_ok=True)
+    cookie_path = cookie_dir / filename
     file.save(str(cookie_path))
     
     # Set as default if first cookie
-    if not get_setting('default_instagram_cookie'):
-        set_setting('default_instagram_cookie', filename)
+    if not get_setting(f'default_{platform}_cookie'):
+        set_setting(f'default_{platform}_cookie', filename)
     
     return jsonify({'filename': filename, 'message': 'Cookie uploaded successfully'})
 
 @app.route('/api/cookies/<filename>', methods=['DELETE'])
 def api_cookies_delete(filename):
     """Delete a cookie file"""
-    cookie_path = COOKIES_DIR / 'instagram' / filename
+    platform = request.args.get('platform', 'instagram')
+    cookie_path = COOKIES_DIR / platform / filename
     
     if cookie_path.exists():
         cookie_path.unlink()
         
         # Clear default if deleted
-        if get_setting('default_instagram_cookie') == filename:
-            set_setting('default_instagram_cookie', '')
+        if get_setting(f'default_{platform}_cookie') == filename:
+            set_setting(f'default_{platform}_cookie', '')
         
         return jsonify({'success': True})
     
@@ -2438,6 +2508,7 @@ def api_cookies_rename(filename):
     """Rename a cookie file"""
     data = request.json
     new_name = data.get('new_name', '').strip()
+    platform = request.args.get('platform', 'instagram')
     
     if not new_name:
         return jsonify({'error': 'New name required'}), 400
@@ -2445,8 +2516,8 @@ def api_cookies_rename(filename):
     if not new_name.endswith('.txt'):
         new_name += '.txt'
     
-    old_path = COOKIES_DIR / 'instagram' / filename
-    new_path = COOKIES_DIR / 'instagram' / new_name
+    old_path = COOKIES_DIR / platform / filename
+    new_path = COOKIES_DIR / platform / new_name
     
     if not old_path.exists():
         return jsonify({'error': 'File not found'}), 404
@@ -2457,8 +2528,8 @@ def api_cookies_rename(filename):
     old_path.rename(new_path)
     
     # Update default if renamed
-    if get_setting('default_instagram_cookie') == filename:
-        set_setting('default_instagram_cookie', new_name)
+    if get_setting(f'default_{platform}_cookie') == filename:
+        set_setting(f'default_{platform}_cookie', new_name)
     
     return jsonify({'success': True, 'filename': new_name})
 
@@ -2467,13 +2538,15 @@ def api_cookies_set_default():
     """Set default cookie file"""
     data = request.json
     filename = data.get('filename', '').strip()
+    platform = data.get('platform', 'instagram')
     
-    cookie_path = COOKIES_DIR / 'instagram' / filename
+    cookie_path = COOKIES_DIR / platform / filename
     if not cookie_path.exists():
         return jsonify({'error': 'File not found'}), 404
     
-    set_setting('default_instagram_cookie', filename)
+    set_setting(f'default_{platform}_cookie', filename)
     return jsonify({'success': True})
+
 
 # Settings API
 @app.route('/api/settings', methods=['GET', 'POST'])

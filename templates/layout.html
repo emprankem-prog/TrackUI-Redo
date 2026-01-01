@@ -582,9 +582,23 @@
                     <div class="upload-zone" onclick="document.getElementById('cookie-upload').click()">
                         <div class="upload-zone-icon">📤</div>
                         <p>Click to upload cookies.txt</p>
-                        <input type="file" id="cookie-upload" accept=".txt" onchange="uploadCookie(event)">
+                        <input type="file" id="cookie-upload" accept=".txt" onchange="uploadCookie(event, 'instagram')">
                     </div>
                     <div id="cookies-list" class="cookie-list mt-md">
+                        <p class="text-muted">Loading cookies...</p>
+                    </div>
+                </div>
+
+                <!-- TikTok Cookies -->
+                <div class="settings-section">
+                    <h4 class="settings-section-title">🎵 TikTok Cookies</h4>
+                    <div class="upload-zone" onclick="document.getElementById('tiktok-cookie-upload').click()">
+                        <div class="upload-zone-icon">📤</div>
+                        <p>Click to upload cookies.txt</p>
+                        <input type="file" id="tiktok-cookie-upload" accept=".txt"
+                            onchange="uploadCookie(event, 'tiktok')">
+                    </div>
+                    <div id="tiktok-cookies-list" class="cookie-list mt-md">
                         <p class="text-muted">Loading cookies...</p>
                     </div>
                 </div>

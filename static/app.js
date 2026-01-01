@@ -253,6 +253,11 @@ function openModal(modalId) {
         backdrop.classList.add('active');
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
+
+        // Load all cookies when settings modal opens
+        if (modalId === 'settings-modal') {
+            loadAllCookies();
+        }
     }
 }
 
@@ -1268,18 +1273,25 @@ function setupCookieSelected(event) {
 // Cookie Management
 // =============================================================================
 
-async function loadCookies() {
+async function loadCookies(platform = 'instagram') {
     try {
-        const response = await fetch('/api/cookies');
+        const response = await fetch(`/api/cookies?platform=${platform}`);
         const cookies = await response.json();
-        renderCookiesList(cookies);
+        renderCookiesList(cookies, platform);
     } catch (error) {
         console.error('Failed to load cookies:', error);
     }
 }
 
-function renderCookiesList(cookies) {
-    const container = document.getElementById('cookies-list');
+// Load all platform cookies on settings open
+function loadAllCookies() {
+    loadCookies('instagram');
+    loadCookies('tiktok');
+}
+
+function renderCookiesList(cookies, platform = 'instagram') {
+    const containerId = platform === 'tiktok' ? 'tiktok-cookies-list' : 'cookies-list';
+    const container = document.getElementById(containerId);
     if (!container) return;
 
     if (cookies.length === 0) {
@@ -1300,21 +1312,22 @@ function renderCookiesList(cookies) {
             </div>
             <div class="cookie-item-actions">
                 ${!cookie.is_default ? `
-                    <button class="btn btn-ghost btn-icon" onclick="setDefaultCookie('${cookie.filename}')" title="Set as default">⭐</button>
+                    <button class="btn btn-ghost btn-icon" onclick="setDefaultCookie('${cookie.filename}', '${platform}')" title="Set as default">⭐</button>
                 ` : ''}
-                <button class="btn btn-ghost btn-icon" onclick="renameCookie('${cookie.filename}')" title="Rename">✏️</button>
-                <button class="btn btn-ghost btn-icon" onclick="deleteCookie('${cookie.filename}')" title="Delete">🗑️</button>
+                <button class="btn btn-ghost btn-icon" onclick="renameCookie('${cookie.filename}', '${platform}')" title="Rename">✏️</button>
+                <button class="btn btn-ghost btn-icon" onclick="deleteCookie('${cookie.filename}', '${platform}')" title="Delete">🗑️</button>
             </div>
         </div>
     `).join('');
 }
 
-async function uploadCookie(event) {
+async function uploadCookie(event, platform = 'instagram') {
     const file = event.target.files[0];
     if (!file) return;
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('platform', platform);
 
     try {
         const response = await fetch('/api/cookies/upload', {
@@ -1325,8 +1338,8 @@ async function uploadCookie(event) {
         const data = await response.json();
 
         if (response.ok) {
-            showToast(`Uploaded ${data.filename}`, 'success');
-            loadCookies();
+            showToast(`Uploaded ${data.filename} for ${platform}`, 'success');
+            loadCookies(platform);
         } else {
             showToast(data.error || 'Failed to upload cookie', 'error');
         }
@@ -1338,19 +1351,19 @@ async function uploadCookie(event) {
     event.target.value = '';
 }
 
-async function deleteCookie(filename) {
+async function deleteCookie(filename, platform = 'instagram') {
     if (!confirm(`Delete cookie "${filename}"?`)) {
         return;
     }
 
     try {
-        const response = await fetch(`/api/cookies/${encodeURIComponent(filename)}`, {
+        const response = await fetch(`/api/cookies/${encodeURIComponent(filename)}?platform=${platform}`, {
             method: 'DELETE'
         });
 
         if (response.ok) {
             showToast('Cookie deleted', 'success');
-            loadCookies();
+            loadCookies(platform);
         } else {
             showToast('Failed to delete cookie', 'error');
         }
@@ -1359,14 +1372,14 @@ async function deleteCookie(filename) {
     }
 }
 
-async function renameCookie(filename) {
+async function renameCookie(filename, platform = 'instagram') {
     const newName = prompt('Enter new name:', filename.replace('.txt', ''));
     if (!newName || newName === filename.replace('.txt', '')) {
         return;
     }
 
     try {
-        const response = await fetch(`/api/cookies/${encodeURIComponent(filename)}/rename`, {
+        const response = await fetch(`/api/cookies/${encodeURIComponent(filename)}/rename?platform=${platform}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ new_name: newName })
@@ -1376,7 +1389,7 @@ async function renameCookie(filename) {
 
         if (response.ok) {
             showToast(`Renamed to ${data.filename}`, 'success');
-            loadCookies();
+            loadCookies(platform);
         } else {
             showToast(data.error || 'Failed to rename cookie', 'error');
         }
@@ -1385,17 +1398,17 @@ async function renameCookie(filename) {
     }
 }
 
-async function setDefaultCookie(filename) {
+async function setDefaultCookie(filename, platform = 'instagram') {
     try {
         const response = await fetch('/api/cookies/default', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ filename })
+            body: JSON.stringify({ filename, platform })
         });
 
         if (response.ok) {
-            showToast(`Set ${filename} as default`, 'success');
-            loadCookies();
+            showToast(`Set ${filename} as default for ${platform}`, 'success');
+            loadCookies(platform);
         } else {
             showToast('Failed to set default cookie', 'error');
         }
