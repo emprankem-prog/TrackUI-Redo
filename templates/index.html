@@ -118,38 +118,42 @@
         </div>
 
         <!-- Actions -->
-        <div class="card-footer user-card-actions">
-            <a href="/user/{{ user.platform }}/{{ user.username }}" class="btn btn-secondary">
-                👁️ View
-            </a>
-            <button class="btn btn-primary"
-                onclick="event.stopPropagation(); syncUser({{ user.id }}, '{{ user.username }}')">
-                🔄 Sync
-            </button>
-            {% if user.platform == 'instagram' %}
-            <a href="https://instagram.com/{{ display_name }}" target="_blank" class="btn btn-ghost btn-icon"
-                title="Open Instagram" onclick="event.stopPropagation()">
-                🔗
-            </a>
-            {% elif user.platform == 'tiktok' %}
-            <a href="https://tiktok.com/@{{ display_name }}" target="_blank" class="btn btn-ghost btn-icon"
-                title="Open TikTok" onclick="event.stopPropagation()">
-                🔗
-            </a>
-            {% elif user.platform == 'coomer' %}
-            <a href="https://coomer.st/{{ user.username.replace('/', '/user/') }}" target="_blank"
-                class="btn btn-ghost btn-icon" title="Open Coomer" onclick="event.stopPropagation()">
-                🔗
-            </a>
-            {% endif %}
-            <a href="/api/users/{{ user.id }}/download-zip" class="btn btn-ghost btn-icon" title="Download as ZIP"
-                onclick="event.stopPropagation()">
-                📦
-            </a>
-            <button class="btn btn-ghost btn-icon"
-                onclick="event.stopPropagation(); deleteUser({{ user.id }}, '{{ user.username }}')" title="Delete">
-                🗑️
-            </button>
+        <div class="user-card-actions">
+            <div class="user-card-actions-left">
+                <a href="/user/{{ user.platform }}/{{ user.username }}" class="btn btn-secondary">
+                    👁️ View
+                </a>
+                <button class="btn btn-primary"
+                    onclick="event.stopPropagation(); syncUser({{ user.id }}, '{{ user.username }}')">
+                    🔄 Sync
+                </button>
+            </div>
+            <div class="user-card-actions-right">
+                {% if user.platform == 'instagram' %}
+                <a href="https://instagram.com/{{ display_name }}" target="_blank" class="btn btn-icon"
+                    title="Open Instagram" onclick="event.stopPropagation()">
+                    🔗
+                </a>
+                {% elif user.platform == 'tiktok' %}
+                <a href="https://tiktok.com/@{{ display_name }}" target="_blank" class="btn btn-icon"
+                    title="Open TikTok" onclick="event.stopPropagation()">
+                    🔗
+                </a>
+                {% elif user.platform == 'coomer' %}
+                <a href="https://coomer.st/{{ user.username.replace('/', '/user/') }}" target="_blank"
+                    class="btn btn-icon" title="Open Coomer" onclick="event.stopPropagation()">
+                    🔗
+                </a>
+                {% endif %}
+                <a href="/api/users/{{ user.id }}/download-zip" class="btn btn-icon" title="Download as ZIP"
+                    onclick="event.stopPropagation()">
+                    📦
+                </a>
+                <button class="btn btn-icon"
+                    onclick="event.stopPropagation(); deleteUser({{ user.id }}, '{{ user.username }}')" title="Delete">
+                    🗑️
+                </button>
+            </div>
         </div>
 
         <!-- Last Sync -->

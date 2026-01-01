@@ -374,15 +374,52 @@ img {
 .user-card-actions {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: var(--space-xs);
-    padding: var(--space-sm) var(--space-lg);
+    justify-content: space-between;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border-color);
+    flex-wrap: wrap;
 }
 
 .user-card-actions .btn {
     flex: 0 0 auto;
+}
+
+.user-card-actions .btn-primary,
+.user-card-actions .btn-secondary {
     padding: var(--space-xs) var(--space-sm);
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-xs);
+    border-radius: var(--border-radius-md);
+}
+
+.user-card-actions .btn-icon {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--border-radius-sm);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    transition: all var(--transition-fast);
+    font-size: 12px;
+}
+
+.user-card-actions .btn-icon:hover {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+.user-card-actions-left {
+    display: flex;
+    gap: var(--space-xs);
+}
+
+.user-card-actions-right {
+    display: flex;
+    gap: 4px;
 }
 
 /* User Card */
