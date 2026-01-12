@@ -46,10 +46,6 @@
                 <div class="profile-stat-value">{{ media.stories | length }}</div>
                 <div class="profile-stat-label">Stories</div>
             </div>
-            <div class="profile-stat">
-                <div class="profile-stat-value">{{ media.highlights | length }}</div>
-                <div class="profile-stat-label">Highlights</div>
-            </div>
         </div>
     </div>
 
@@ -67,24 +63,7 @@
     </div>
 </div>
 
-<!-- Highlights Circles (Instagram-style) -->
-{% if media.highlights %}
-<div class="highlights-bar">
-    {% for highlight_name, items in media.highlights.items() %}
-    <div class="highlight-circle" onclick="switchTab('highlights'); scrollToHighlight('{{ highlight_name | e }}')">
-        <div class="highlight-circle-border">
-            {% if items[0].type == 'video' %}
-            <video src="/media/{{ items[0].path }}/{{ items[0].filename }}" class="highlight-thumb"></video>
-            {% else %}
-            <img src="/media/{{ items[0].path }}/{{ items[0].filename }}" alt="{{ highlight_name }}"
-                class="highlight-thumb">
-            {% endif %}
-        </div>
-        <span class="highlight-name">{{ highlight_name }}</span>
-    </div>
-    {% endfor %}
-</div>
-{% endif %}
+
 
 <!-- Media Type Filter -->
 <div class="media-filter">
@@ -106,9 +85,6 @@
     </button>
     <button class="tab" data-tab="stories" onclick="switchTab('stories')">
         ⏳ Stories ({{ media.stories | length }})
-    </button>
-    <button class="tab" data-tab="highlights" onclick="switchTab('highlights')">
-        ⭐ Highlights ({{ media.highlights | length }})
     </button>
 </div>
 
@@ -162,49 +138,9 @@
     {% endif %}
 </div>
 
-<!-- Highlights Tab -->
-<div id="tab-highlights" class="tab-content">
-    {% if media.highlights %}
-    {% for highlight_name, items in media.highlights.items() %}
-    <div class="highlight-group" id="highlight-{{ highlight_name | e | replace(' ', '-') }}">
-        <h3 class="highlight-group-title">
-            ⭐ {{ highlight_name }}
-            <span class="badge">{{ items | length }}</span>
-        </h3>
-        <div class="media-grid-fixed">
-            {% for item in items %}
-            <div class="media-item-fixed"
-                onclick="openMediaViewer('/media/{{ item.path }}/{{ item.filename }}', '{{ item.type }}')">
-                {% if item.type == 'video' %}
-                <video src="/media/{{ item.path }}/{{ item.filename }}" preload="metadata" muted></video>
-                <div class="media-video-indicator">🎬</div>
-                {% else %}
-                <img src="/media/{{ item.path }}/{{ item.filename }}" alt="" loading="lazy">
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endfor %}
-    {% else %}
-    <div class="empty-state">
-        <div class="empty-state-icon">⭐</div>
-        <h2 class="empty-state-title">No highlights yet</h2>
-        <p class="empty-state-description">Highlights will appear here when downloaded.</p>
-    </div>
-    {% endif %}
-</div>
+
 
 <script>
-    function scrollToHighlight(name) {
-        const id = 'highlight-' + name.replace(/ /g, '-');
-        const el = document.getElementById(id);
-        if (el) {
-            setTimeout(() => {
-                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
-        }
-    }
 
     // Media type filter
     let currentFilter = 'all';

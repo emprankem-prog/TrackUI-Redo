@@ -31,6 +31,10 @@ try:
 except ImportError:
     TELEBOT_AVAILABLE = False
 
+# GoFile Downloader
+from gofile_downloader import download_gofile, is_gofile_url
+
+
 # =============================================================================
 # Configuration
 # =============================================================================
@@ -175,6 +179,39 @@ def init_db():
         )
     ''')
     
+    # Profile Groups table - for combining multiple accounts into one card
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS profile_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            avatar_user_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (avatar_user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+    ''')
+    
+    # Group Members table - many-to-many relationship between groups and users
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS group_members (
+            group_id INTEGER,
+            user_id INTEGER,
+            PRIMARY KEY (group_id, user_id),
+            FOREIGN KEY (group_id) REFERENCES profile_groups(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    ''')
+    
+    # Group Tags table - tags for profile groups
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS group_tags (
+            group_id INTEGER,
+            tag_id INTEGER,
+            PRIMARY KEY (group_id, tag_id),
+            FOREIGN KEY (group_id) REFERENCES profile_groups(id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+        )
+    ''')
+    
     # Insert default settings
     default_settings = {
         'scheduler_enabled': 'false',
@@ -224,7 +261,7 @@ def get_next_queue_id():
         queue_id_counter += 1
         return queue_id_counter
 
-def add_to_queue(username, platform, url=None, folder=None):
+def add_to_queue(username, platform, url=None, folder=None, password=None):
     """Add a download job to the queue"""
     job = {
         'id': get_next_queue_id(),
@@ -232,6 +269,7 @@ def add_to_queue(username, platform, url=None, folder=None):
         'platform': platform,
         'url': url,
         'folder': folder,
+        'password': password,  # For GoFile protected content
         'status': 'queued',
         'progress': 0,
         'message': 'Waiting in queue...',
@@ -362,8 +400,13 @@ def run_download(job):
             job['message'] = f'Downloading from {service.upper()}...'
     
     else:
-        # Generic URL download
+        # Generic URL download - check for special handlers
         url = job.get('url', '')
+        
+        # Check if this is a GoFile URL
+        if is_gofile_url(url):
+            run_gofile_download(job, output_dir, url)
+            return
     
     cmd.append(url)
     
@@ -484,6 +527,76 @@ def run_download(job):
             send_telegram_notification(
                 f"❌ {emoji} {display_username}: {job['message']}"
             )
+
+def run_gofile_download(job, output_dir, url):
+    """Execute GoFile download for a job"""
+    import threading
+    
+    # Create a stop event for this download
+    stop_event = threading.Event()
+    job['stop_event'] = stop_event
+    
+    def progress_callback(message, files_downloaded, total_files):
+        """Callback to update job status"""
+        job['message'] = message
+        job['files_downloaded'] = files_downloaded
+        if total_files > 0:
+            job['progress'] = (files_downloaded / total_files) * 100
+    
+    try:
+        job['message'] = 'Initializing GoFile download...'
+        
+        # Get password from job if provided
+        password = job.get('password')
+        
+        # Run the GoFile downloader
+        result = download_gofile(
+            url=url,
+            output_dir=str(output_dir),
+            password=password,
+            progress_callback=progress_callback,
+            stop_event=stop_event,
+        )
+        
+        files_count = result.get('files_downloaded', 0)
+        job['files_downloaded'] = files_count
+        
+        if result.get('success'):
+            job['status'] = 'completed'
+            job['message'] = f"Completed! Downloaded {files_count} files"
+        else:
+            job['status'] = 'failed'
+            errors = result.get('errors', [])
+            job['message'] = result.get('message', 'Download failed')
+            if errors:
+                job['error_log'] = '\n'.join(errors)
+        
+    except Exception as e:
+        job['status'] = 'failed'
+        job['message'] = f'Error: {str(e)}'
+    
+    finally:
+        job['completed_at'] = datetime.now().isoformat()
+        job['process'] = None
+        
+        # Send Telegram notification
+        files_count = job.get('files_downloaded', 0)
+        
+        if job['status'] == 'completed':
+            if files_count > 0:
+                send_telegram_notification(
+                    f"✅ *📦 GoFile Download*\n"
+                    f"📥 Downloaded {files_count} files!"
+                )
+            else:
+                send_telegram_notification(
+                    f"✅ 📦 GoFile: No files found"
+                )
+        else:
+            send_telegram_notification(
+                f"❌ 📦 GoFile: {job['message']}"
+            )
+
 
 def update_user_last_sync(username, platform):
     """Update user's last_sync timestamp"""
@@ -1659,9 +1772,103 @@ def index():
     cursor.execute('SELECT * FROM tags ORDER BY name')
     all_tags = [dict(row) for row in cursor.fetchall()]
     
+    # Get all profile groups with their members
+    cursor.execute('''
+        SELECT g.id, g.name, g.avatar_user_id, g.created_at,
+               u.profile_picture as avatar_url, u.username as avatar_username, u.platform as avatar_platform
+        FROM profile_groups g
+        LEFT JOIN users u ON g.avatar_user_id = u.id
+        ORDER BY g.created_at DESC
+    ''')
+    groups = []
+    grouped_user_ids = set()  # Track which users are in groups
+    
+    for row in cursor.fetchall():
+        group = dict(row)
+        # Get members for this group
+        cursor.execute('''
+            SELECT u.id, u.username, u.platform, u.display_name, u.profile_picture
+            FROM group_members gm
+            JOIN users u ON gm.user_id = u.id
+            WHERE gm.group_id = ?
+        ''', (group['id'],))
+        members = [dict(m) for m in cursor.fetchall()]
+        
+        # Resolve member profile pictures and track grouped user IDs
+        for member in members:
+            grouped_user_ids.add(member['id'])
+            if not member.get('profile_picture'):
+                member['profile_picture'] = get_avatar_url(member['username'], member['platform'])
+        
+        group['members'] = members
+        group['member_count'] = len(members)
+        
+        # Resolve group avatar URL
+        if not group.get('avatar_url') and group.get('avatar_username'):
+            group['avatar_url'] = get_avatar_url(group['avatar_username'], group['avatar_platform'])
+        
+        # Get group tags
+        cursor.execute('''
+            SELECT t.id, t.name, t.color
+            FROM group_tags gt
+            JOIN tags t ON gt.tag_id = t.id
+            WHERE gt.group_id = ?
+        ''', (group['id'],))
+        group['tags'] = [dict(t) for t in cursor.fetchall()]
+        
+        # Get unique platforms with emojis
+        platform_icons = {
+            'instagram': '📸 Instagram',
+            'tiktok': '🎵 TikTok',
+            'coomer': '💖 Coomer'
+        }
+        platforms = list(set(m['platform'] for m in members))
+        group['platforms'] = [platform_icons.get(p, p) for p in platforms]
+        group['platforms_raw'] = platforms
+        
+        # Calculate combined stats
+        total_posts = 0
+        total_videos = 0
+        total_size = 0
+        for member in members:
+            member_dir = DOWNLOADS_DIR / member['platform'] / member['username']
+            if member_dir.exists():
+                for root, dirs, files in os.walk(member_dir):
+                    for f in files:
+                        if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.mp4', '.webm', '.mov')):
+                            file_path = Path(root) / f
+                            try:
+                                total_size += file_path.stat().st_size
+                            except:
+                                pass
+                            if f.lower().endswith(('.mp4', '.webm', '.mov')):
+                                total_videos += 1
+                            else:
+                                total_posts += 1
+        
+        # Format size
+        if total_size >= 1024 * 1024 * 1024:
+            size_str = f"{total_size / (1024*1024*1024):.1f} GB"
+        elif total_size >= 1024 * 1024:
+            size_str = f"{total_size / (1024*1024):.1f} MB"
+        elif total_size >= 1024:
+            size_str = f"{total_size / 1024:.0f} KB"
+        else:
+            size_str = f"{total_size} B"
+        
+        group['stats'] = {
+            'posts': total_posts,
+            'videos': total_videos,
+            'size': size_str
+        }
+        groups.append(group)
+    
+    # Filter out users that are in groups
+    users = [u for u in users if u['id'] not in grouped_user_ids]
+    
     conn.close()
     
-    return render_template('index.html', users=users, tags=all_tags)
+    return render_template('index.html', users=users, tags=all_tags, groups=groups)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -2151,7 +2358,7 @@ def api_users():
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     
-    # Parse tags
+    # Parse tags and resolve avatar URLs
     for user in users:
         if user['tags']:
             user['tags'] = [
@@ -2160,6 +2367,10 @@ def api_users():
             ]
         else:
             user['tags'] = []
+        
+        # Resolve avatar URL if not already set
+        if not user.get('profile_picture'):
+            user['profile_picture'] = get_avatar_url(user['username'], user['platform'])
     
     return jsonify(users)
 
@@ -2349,6 +2560,187 @@ def api_user_tags(user_id):
     conn.close()
     return jsonify({'success': True})
 
+# Profile Groups API
+@app.route('/api/groups', methods=['GET', 'POST'])
+def api_groups():
+    """Group CRUD - List all groups or create a new group"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    if request.method == 'GET':
+        # Get all groups with their members
+        cursor.execute('''
+            SELECT g.id, g.name, g.avatar_user_id, g.created_at,
+                   u.profile_picture as avatar_url
+            FROM profile_groups g
+            LEFT JOIN users u ON g.avatar_user_id = u.id
+            ORDER BY g.created_at DESC
+        ''')
+        groups = []
+        for row in cursor.fetchall():
+            group = dict(row)
+            # Get members for this group
+            cursor.execute('''
+                SELECT u.id, u.username, u.platform, u.display_name, u.profile_picture
+                FROM group_members gm
+                JOIN users u ON gm.user_id = u.id
+                WHERE gm.group_id = ?
+            ''', (group['id'],))
+            members = [dict(m) for m in cursor.fetchall()]
+            group['members'] = members
+            group['member_count'] = len(members)
+            # Get unique platforms
+            platforms = list(set(m['platform'] for m in members))
+            group['platforms'] = platforms
+            groups.append(group)
+        conn.close()
+        return jsonify(groups)
+    
+    elif request.method == 'POST':
+        data = request.json
+        name = data.get('name', '').strip()
+        member_ids = data.get('member_ids', [])
+        avatar_user_id = data.get('avatar_user_id')
+        
+        if not name:
+            conn.close()
+            return jsonify({'error': 'Group name is required'}), 400
+        
+        if len(member_ids) < 2:
+            conn.close()
+            return jsonify({'error': 'A group needs at least 2 members'}), 400
+        
+        # Create the group
+        cursor.execute('''
+            INSERT INTO profile_groups (name, avatar_user_id)
+            VALUES (?, ?)
+        ''', (name, avatar_user_id))
+        group_id = cursor.lastrowid
+        
+        # Add members
+        for user_id in member_ids:
+            cursor.execute('''
+                INSERT OR IGNORE INTO group_members (group_id, user_id)
+                VALUES (?, ?)
+            ''', (group_id, user_id))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({'id': group_id, 'message': 'Group created'})
+
+@app.route('/api/groups/<int:group_id>', methods=['GET', 'PUT', 'DELETE'])
+def api_group(group_id):
+    """Single group operations"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    if request.method == 'GET':
+        cursor.execute('''
+            SELECT g.id, g.name, g.avatar_user_id, g.created_at,
+                   u.profile_picture as avatar_url
+            FROM profile_groups g
+            LEFT JOIN users u ON g.avatar_user_id = u.id
+            WHERE g.id = ?
+        ''', (group_id,))
+        group = cursor.fetchone()
+        if not group:
+            conn.close()
+            return jsonify({'error': 'Group not found'}), 404
+        
+        group = dict(group)
+        # Get members
+        cursor.execute('''
+            SELECT u.id, u.username, u.platform, u.display_name, u.profile_picture
+            FROM group_members gm
+            JOIN users u ON gm.user_id = u.id
+            WHERE gm.group_id = ?
+        ''', (group_id,))
+        group['members'] = [dict(m) for m in cursor.fetchall()]
+        conn.close()
+        return jsonify(group)
+    
+    elif request.method == 'PUT':
+        data = request.json
+        name = data.get('name')
+        avatar_user_id = data.get('avatar_user_id')
+        member_ids = data.get('member_ids')
+        
+        if name:
+            cursor.execute('UPDATE profile_groups SET name = ? WHERE id = ?', (name, group_id))
+        
+        if avatar_user_id is not None:
+            cursor.execute('UPDATE profile_groups SET avatar_user_id = ? WHERE id = ?', 
+                          (avatar_user_id if avatar_user_id else None, group_id))
+        
+        if member_ids is not None:
+            # Replace all members
+            cursor.execute('DELETE FROM group_members WHERE group_id = ?', (group_id,))
+            for user_id in member_ids:
+                cursor.execute('''
+                    INSERT OR IGNORE INTO group_members (group_id, user_id)
+                    VALUES (?, ?)
+                ''', (group_id, user_id))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    
+    elif request.method == 'DELETE':
+        cursor.execute('DELETE FROM profile_groups WHERE id = ?', (group_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+
+@app.route('/api/groups/<int:group_id>/sync', methods=['POST'])
+def api_group_sync(group_id):
+    """Sync all users in a group"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT u.id, u.username, u.platform
+        FROM group_members gm
+        JOIN users u ON gm.user_id = u.id
+        WHERE gm.group_id = ?
+    ''', (group_id,))
+    members = cursor.fetchall()
+    conn.close()
+    
+    if not members:
+        return jsonify({'error': 'Group not found or empty'}), 404
+    
+    # Add each member to the download queue
+    for member in members:
+        add_to_queue(member['username'], member['platform'])
+    
+    return jsonify({'message': f'Added {len(members)} users to download queue'})
+
+@app.route('/api/groups/<int:group_id>/tags', methods=['POST', 'DELETE'])
+def api_group_tags(group_id):
+    """Assign/remove tags from group"""
+    conn = get_db()
+    cursor = conn.cursor()
+    data = request.json
+    tag_id = data.get('tag_id')
+    
+    if not tag_id:
+        return jsonify({'error': 'tag_id required'}), 400
+    
+    if request.method == 'POST':
+        try:
+            cursor.execute('INSERT INTO group_tags (group_id, tag_id) VALUES (?, ?)', 
+                          (group_id, tag_id))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            pass  # Already assigned
+    else:
+        cursor.execute('DELETE FROM group_tags WHERE group_id = ? AND tag_id = ?', 
+                      (group_id, tag_id))
+        conn.commit()
+    
+    conn.close()
+    return jsonify({'success': True})
+
 # Download Queue API
 @app.route('/api/queue', methods=['GET'])
 def api_queue():
@@ -2429,11 +2821,12 @@ def api_download():
     data = request.json
     url = data.get('url', '').strip()
     folder = data.get('folder', 'external').strip()
+    password = data.get('password', '').strip() or None
     
     if not url:
         return jsonify({'error': 'URL required'}), 400
     
-    queue_id = add_to_queue('external', 'external', url=url, folder=folder)
+    queue_id = add_to_queue('external', 'external', url=url, folder=folder, password=password)
     return jsonify({'queue_id': queue_id, 'message': 'Added to download queue'})
 
 # Cookie Management API

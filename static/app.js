@@ -266,6 +266,11 @@ function closeModal(modalId) {
     const modal = document.getElementById(modalId);
 
     if (modal) {
+        // Stop any videos/audio in this modal
+        modal.querySelectorAll('video, audio').forEach(media => {
+            media.pause();
+            media.currentTime = 0;
+        });
         modal.classList.remove('active');
     }
 
@@ -280,6 +285,11 @@ function closeModal(modalId) {
 function closeAllModals() {
     const backdrop = document.getElementById('modal-backdrop');
     document.querySelectorAll('.modal.active').forEach(modal => {
+        // Stop any videos/audio in each modal
+        modal.querySelectorAll('video, audio').forEach(media => {
+            media.pause();
+            media.currentTime = 0;
+        });
         modal.classList.remove('active');
     });
 
@@ -393,7 +403,7 @@ async function syncUser(userId, username) {
 
         if (response.ok) {
             showToast(`Started sync for ${username}`, 'success');
-            openModal('downloads-modal');
+            openModal('sync-confirm-modal');
         } else {
             showToast(data.error || 'Failed to start sync', 'error');
         }
@@ -589,6 +599,76 @@ function openTagAssignModal(userId, currentTags) {
     }
 }
 
+// Group Tag Assignment
+function openGroupTagAssignModal(groupId, currentTags) {
+    // Build modal content with available tags
+    const availableTags = state.tags.filter(t => !currentTags.includes(t.id));
+
+    let content = '<div class="form-group"><label class="form-label">Select tag to assign:</label>';
+
+    if (availableTags.length === 0) {
+        content += '<p class="text-muted">No more tags available</p>';
+    } else {
+        content += '<div class="flex flex-col gap-sm">';
+        availableTags.forEach(tag => {
+            content += `
+                <button class="btn btn-secondary" onclick="assignGroupTag(${groupId}, ${tag.id}); closeAllModals();">
+                    <span class="tag" style="background-color: ${tag.color}20; color: ${tag.color}">${tag.name}</span>
+                </button>
+            `;
+        });
+        content += '</div>';
+    }
+    content += '</div>';
+
+    // Show in a temporary modal or use existing
+    const modal = document.getElementById('tag-assign-modal');
+    if (modal) {
+        modal.querySelector('.modal-body').innerHTML = content;
+        openModal('tag-assign-modal');
+    }
+}
+
+async function assignGroupTag(groupId, tagId) {
+    try {
+        const response = await fetch(`/api/groups/${groupId}/tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tag_id: tagId })
+        });
+
+        if (response.ok) {
+            showToast('Tag assigned', 'success');
+            location.reload();
+        } else {
+            showToast('Failed to assign tag', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+        console.error(error);
+    }
+}
+
+async function removeGroupTag(groupId, tagId) {
+    try {
+        const response = await fetch(`/api/groups/${groupId}/tags`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tag_id: tagId })
+        });
+
+        if (response.ok) {
+            showToast('Tag removed', 'success');
+            location.reload();
+        } else {
+            showToast('Failed to remove tag', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+        console.error(error);
+    }
+}
+
 // =============================================================================
 // Random User
 // =============================================================================
@@ -778,17 +858,24 @@ async function downloadExternalUrl(event) {
     const form = event.target;
     const url = form.querySelector('#external-url').value.trim();
     const folder = form.querySelector('#external-folder').value.trim() || 'external';
+    const password = form.querySelector('#external-password').value.trim() || null;
 
     if (!url) {
         showToast('Please enter a URL', 'error');
         return;
     }
 
+    // Build request body
+    const body = { url, folder };
+    if (password) {
+        body.password = password;
+    }
+
     try {
         const response = await fetch('/api/download', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, folder })
+            body: JSON.stringify(body)
         });
 
         const data = await response.json();
@@ -796,6 +883,8 @@ async function downloadExternalUrl(event) {
         if (response.ok) {
             showToast('Added to download queue', 'success');
             form.reset();
+            // Restore default folder value after reset
+            form.querySelector('#external-folder').value = 'external';
             openModal('downloads-modal');
         } else {
             showToast(data.error || 'Failed to add download', 'error');
@@ -1931,4 +2020,384 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
+}
+
+// =============================================================================
+// Profile Groups
+// =============================================================================
+
+let selectedGroupUsers = [];
+let selectedAvatarUserId = null;
+
+// Open Create Group Modal
+async function openCreateGroupModal() {
+    selectedGroupUsers = [];
+    selectedAvatarUserId = null;
+
+    // Reset form
+    document.getElementById('group-name').value = '';
+    document.getElementById('avatar-picker-section').style.display = 'none';
+
+    // Fetch all users
+    try {
+        const response = await fetch('/api/users');
+        const users = await response.json();
+
+        const container = document.getElementById('group-user-list');
+        container.innerHTML = users.map(user => `
+            <div class="user-select-item" data-user-id="${user.id}" onclick="toggleGroupUserSelection(${user.id}, this)">
+                <div class="user-select-avatar">
+                    ${user.profile_picture
+                ? `<img src="${user.profile_picture}" alt="${user.username}">`
+                : `<span>${user.platform === 'instagram' ? '📸' : (user.platform === 'tiktok' ? '🎵' : '💖')}</span>`
+            }
+                </div>
+                <div class="user-select-info">
+                    <div class="user-select-name">${user.display_name || user.username}</div>
+                    <div class="user-select-platform">
+                        ${user.platform === 'instagram' ? '📸' : (user.platform === 'tiktok' ? '🎵' : '💖')} 
+                        ${user.platform}
+                    </div>
+                </div>
+                <div class="user-select-check">✓</div>
+            </div>
+        `).join('');
+
+        openModal('create-group-modal');
+    } catch (error) {
+        showToast('Failed to load users', 'error');
+    }
+}
+
+// Toggle user selection in group modal
+function toggleGroupUserSelection(userId, element) {
+    const index = selectedGroupUsers.indexOf(userId);
+    if (index > -1) {
+        selectedGroupUsers.splice(index, 1);
+        element.classList.remove('selected');
+    } else {
+        selectedGroupUsers.push(userId);
+        element.classList.add('selected');
+    }
+
+    // Update avatar picker
+    updateAvatarPicker();
+}
+
+// Update avatar picker based on selected users
+function updateAvatarPicker() {
+    const section = document.getElementById('avatar-picker-section');
+    const picker = document.getElementById('avatar-picker');
+
+    if (selectedGroupUsers.length < 2) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+
+    // Get selected user elements
+    const selectedItems = document.querySelectorAll('#group-user-list .user-select-item.selected');
+    picker.innerHTML = '';
+
+    selectedItems.forEach(item => {
+        const userId = parseInt(item.dataset.userId);
+        const avatarHtml = item.querySelector('.user-select-avatar').innerHTML;
+        const name = item.querySelector('.user-select-name').textContent;
+
+        const avatarOption = document.createElement('div');
+        avatarOption.className = 'avatar-option' + (selectedAvatarUserId === userId ? ' selected' : '');
+        avatarOption.dataset.userId = userId;
+        avatarOption.onclick = () => selectGroupAvatar(userId);
+        avatarOption.innerHTML = `
+            <div class="avatar-option-img">${avatarHtml}</div>
+            <div class="avatar-option-name">${name}</div>
+        `;
+        picker.appendChild(avatarOption);
+    });
+
+    // Auto-select first if none selected
+    if (!selectedAvatarUserId && selectedGroupUsers.length > 0) {
+        selectedAvatarUserId = selectedGroupUsers[0];
+        const firstOption = picker.querySelector('.avatar-option');
+        if (firstOption) firstOption.classList.add('selected');
+    }
+}
+
+// Select avatar for group
+function selectGroupAvatar(userId) {
+    selectedAvatarUserId = userId;
+    document.querySelectorAll('.avatar-option').forEach(opt => {
+        opt.classList.toggle('selected', parseInt(opt.dataset.userId) === userId);
+    });
+}
+
+// Create group
+async function createGroup(event) {
+    event.preventDefault();
+
+    const name = document.getElementById('group-name').value.trim();
+
+    if (!name) {
+        showToast('Please enter a group name', 'error');
+        return;
+    }
+
+    if (selectedGroupUsers.length < 2) {
+        showToast('Please select at least 2 accounts', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/groups', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: name,
+                member_ids: selectedGroupUsers,
+                avatar_user_id: selectedAvatarUserId
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showToast('Group created!', 'success');
+            closeModal('create-group-modal');
+            location.reload();
+        } else {
+            showToast(data.error || 'Failed to create group', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to create group', 'error');
+    }
+}
+
+// Open group selector from button data attributes
+function openGroupSelectorFromButton(button) {
+    const groupId = button.dataset.groupId;
+    const groupName = button.dataset.groupName;
+    const members = JSON.parse(button.dataset.groupMembers);
+    openGroupSelector(groupId, groupName, members);
+}
+
+// Open group selector modal
+function openGroupSelector(groupId, groupName, members) {
+    document.getElementById('group-selector-title').textContent = groupName;
+
+    const container = document.getElementById('group-members-list');
+    container.innerHTML = members.map(member => {
+        const platformIcon = member.platform === 'instagram' ? '📸' : (member.platform === 'tiktok' ? '🎵' : '💖');
+        const displayName = member.display_name || member.username;
+
+        return `
+            <a href="/user/${member.platform}/${member.username}" class="group-member-item">
+                <div class="group-member-avatar">
+                    ${member.profile_picture
+                ? `<img src="${member.profile_picture}" alt="${displayName}">`
+                : `<span>${platformIcon}</span>`
+            }
+                </div>
+                <div class="group-member-info">
+                    <div class="group-member-name">${displayName}</div>
+                    <div class="group-member-platform">${platformIcon} ${member.platform}</div>
+                </div>
+                <div class="group-member-arrow">→</div>
+            </a>
+        `;
+    }).join('');
+
+    openModal('group-selector-modal');
+}
+
+// Sync all users in a group
+async function syncGroup(groupId) {
+    try {
+        const response = await fetch(`/api/groups/${groupId}/sync`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showToast(data.message, 'success');
+            openModal('sync-confirm-modal');
+        } else {
+            showToast(data.error || 'Failed to sync group', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to sync group', 'error');
+    }
+}
+
+// Edit group
+async function editGroup(groupId) {
+    try {
+        const response = await fetch(`/api/groups/${groupId}`);
+        const group = await response.json();
+
+        if (!response.ok) {
+            showToast('Failed to load group', 'error');
+            return;
+        }
+
+        // Set form values
+        document.getElementById('edit-group-id').value = groupId;
+        document.getElementById('edit-group-name').value = group.name;
+
+        // Fetch all users and mark selected ones
+        const usersResponse = await fetch('/api/users');
+        const allUsers = await usersResponse.json();
+
+        const memberIds = group.members.map(m => m.id);
+        selectedGroupUsers = [...memberIds];
+        selectedAvatarUserId = group.avatar_user_id;
+
+        const container = document.getElementById('edit-group-user-list');
+        container.innerHTML = allUsers.map(user => `
+            <div class="user-select-item ${memberIds.includes(user.id) ? 'selected' : ''}" 
+                 data-user-id="${user.id}" 
+                 onclick="toggleEditGroupUserSelection(${user.id}, this)">
+                <div class="user-select-avatar">
+                    ${user.profile_picture
+                ? `<img src="${user.profile_picture}" alt="${user.username}">`
+                : `<span>${user.platform === 'instagram' ? '📸' : (user.platform === 'tiktok' ? '🎵' : '💖')}</span>`
+            }
+                </div>
+                <div class="user-select-info">
+                    <div class="user-select-name">${user.display_name || user.username}</div>
+                    <div class="user-select-platform">
+                        ${user.platform === 'instagram' ? '📸' : (user.platform === 'tiktok' ? '🎵' : '💖')} 
+                        ${user.platform}
+                    </div>
+                </div>
+                <div class="user-select-check">✓</div>
+            </div>
+        `).join('');
+
+        // Update avatar picker
+        updateEditAvatarPicker(allUsers);
+
+        openModal('edit-group-modal');
+    } catch (error) {
+        showToast('Failed to load group', 'error');
+    }
+}
+
+function toggleEditGroupUserSelection(userId, element) {
+    const index = selectedGroupUsers.indexOf(userId);
+    if (index > -1) {
+        selectedGroupUsers.splice(index, 1);
+        element.classList.remove('selected');
+    } else {
+        selectedGroupUsers.push(userId);
+        element.classList.add('selected');
+    }
+
+    // Update avatar picker
+    const allItems = document.querySelectorAll('#edit-group-user-list .user-select-item');
+    const users = [];
+    allItems.forEach(item => {
+        users.push({
+            id: parseInt(item.dataset.userId),
+            profile_picture: item.querySelector('img')?.src,
+            display_name: item.querySelector('.user-select-name').textContent,
+            platform: item.querySelector('.user-select-platform').textContent.trim()
+        });
+    });
+    updateEditAvatarPicker(users);
+}
+
+function updateEditAvatarPicker(users) {
+    const picker = document.getElementById('edit-avatar-picker');
+
+    const selectedUsers = users.filter(u => selectedGroupUsers.includes(u.id));
+
+    if (selectedUsers.length < 2) {
+        picker.innerHTML = '<p class="text-muted">Select at least 2 users</p>';
+        return;
+    }
+
+    picker.innerHTML = selectedUsers.map(user => `
+        <div class="avatar-option ${selectedAvatarUserId === user.id ? 'selected' : ''}" 
+             data-user-id="${user.id}" 
+             onclick="selectEditGroupAvatar(${user.id})">
+            <div class="avatar-option-img">
+                ${user.profile_picture
+            ? `<img src="${user.profile_picture}" alt="${user.display_name}">`
+            : `<span>👤</span>`
+        }
+            </div>
+            <div class="avatar-option-name">${user.display_name}</div>
+        </div>
+    `).join('');
+}
+
+function selectEditGroupAvatar(userId) {
+    selectedAvatarUserId = userId;
+    document.querySelectorAll('#edit-avatar-picker .avatar-option').forEach(opt => {
+        opt.classList.toggle('selected', parseInt(opt.dataset.userId) === userId);
+    });
+}
+
+async function saveGroupEdit(event) {
+    event.preventDefault();
+
+    const groupId = document.getElementById('edit-group-id').value;
+    const name = document.getElementById('edit-group-name').value.trim();
+
+    if (!name) {
+        showToast('Please enter a group name', 'error');
+        return;
+    }
+
+    if (selectedGroupUsers.length < 2) {
+        showToast('Please select at least 2 accounts', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/groups/${groupId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: name,
+                member_ids: selectedGroupUsers,
+                avatar_user_id: selectedAvatarUserId
+            })
+        });
+
+        if (response.ok) {
+            showToast('Group updated!', 'success');
+            closeModal('edit-group-modal');
+            location.reload();
+        } else {
+            const data = await response.json();
+            showToast(data.error || 'Failed to update group', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to update group', 'error');
+    }
+}
+
+// Delete group
+async function deleteGroup(groupId, groupName) {
+    if (!confirm(`Are you sure you want to delete the group "${groupName}"?\n\nThis will NOT delete the individual accounts.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/groups/${groupId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            showToast('Group deleted', 'success');
+            location.reload();
+        } else {
+            showToast('Failed to delete group', 'error');
+        }
+    } catch (error) {
+        showToast('Failed to delete group', 'error');
+    }
 }

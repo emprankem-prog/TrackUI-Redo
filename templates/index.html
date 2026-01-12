@@ -40,8 +40,89 @@
 </div>
 
 <!-- User Grid -->
-{% if users %}
+{% if users or groups %}
 <div class="user-grid">
+    <!-- Profile Groups -->
+    {% for group in groups %}
+    <div class="card user-card group-card" data-group-id="{{ group.id }}">
+        <!-- Banner with gradient for groups -->
+        <div class="user-card-banner group-banner"></div>
+
+        <!-- Avatar -->
+        {% if group.avatar_url %}
+        <img src="{{ group.avatar_url }}" alt="{{ group.name }}" class="user-card-avatar">
+        {% else %}
+        <div class="user-card-avatar">👥</div>
+        {% endif %}
+
+        <div class="card-body user-card-content">
+            <h3 class="user-card-name">{{ group.name }}</h3>
+            <p class="user-card-username">{{ group.member_count }} accounts</p>
+
+            <!-- Combined Platform Badges -->
+            <span class="user-card-platform">
+                {{ group.platforms | join(' / ') }}
+            </span>
+
+            <!-- Combined Stats -->
+            <div class="user-card-stats">
+                <div class="user-card-stat">
+                    <div class="user-card-stat-value">{{ group.stats.posts }}</div>
+                    <div class="user-card-stat-label">Posts</div>
+                </div>
+                <div class="user-card-stat">
+                    <div class="user-card-stat-value">{{ group.stats.videos }}</div>
+                    <div class="user-card-stat-label">Videos</div>
+                </div>
+                <div class="user-card-stat">
+                    <div class="user-card-stat-value">{{ group.stats.size }}</div>
+                    <div class="user-card-stat-label">Size</div>
+                </div>
+            </div>
+
+            <!-- Tags -->
+            <div class="user-card-tags">
+                {% for tag in group.tags %}
+                <span class="tag"
+                    style="background-color: {{ tag.color }}20; color: {{ tag.color }}; border: 1px solid {{ tag.color }}">
+                    {{ tag.name }}
+                </span>
+                {% endfor %}
+                <button class="btn btn-ghost" style="font-size: 12px; padding: 2px 8px;"
+                    onclick="event.stopPropagation(); loadTags(); openGroupTagAssignModal({{ group.id }}, [{% for tag in group.tags %}{{ tag.id }}{% if not loop.last %},{% endif %}{% endfor %}])">
+                    +
+                </button>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="user-card-actions">
+            <div class="user-card-actions-left">
+                <button class="btn btn-secondary" data-group-id="{{ group.id }}" data-group-name="{{ group.name }}"
+                    data-group-members='{{ group.members | tojson }}'
+                    onclick="event.stopPropagation(); openGroupSelectorFromButton(this)">
+                    👁️ View
+                </button>
+                <button class="btn btn-primary" onclick="event.stopPropagation(); syncGroup({{ group.id }})">
+                    🔄 Sync All
+                </button>
+            </div>
+            <div class="user-card-actions-right">
+                <button class="btn btn-icon" onclick="event.stopPropagation(); editGroup({{ group.id }})"
+                    title="Edit Group">
+                    ✏️
+                </button>
+                <button class="btn btn-icon"
+                    onclick="event.stopPropagation(); deleteGroup({{ group.id }}, '{{ group.name }}')"
+                    title="Delete Group">
+                    🗑️
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Individual Users -->
     {% for user in users %}
     <div class="card user-card" data-user-id="{{ user.id }}" data-platform="{{ user.platform }}"
         data-username="{{ user.username }}" data-display-name="{{ user.display_name or '' }}"
