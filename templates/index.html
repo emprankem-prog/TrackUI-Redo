@@ -97,7 +97,8 @@
 
         <!-- Actions -->
         <div class="user-card-actions">
-            <div class="user-card-actions-left">
+            <!-- Main Buttons Row -->
+            <div class="user-card-actions-main">
                 <button class="btn btn-secondary" data-group-id="{{ group.id }}" data-group-name="{{ group.name }}"
                     data-group-members='{{ group.members | tojson }}'
                     onclick="event.stopPropagation(); openGroupSelectorFromButton(this)">
@@ -107,14 +108,14 @@
                     🔄 Sync All
                 </button>
             </div>
-            <div class="user-card-actions-right">
-                <button class="btn btn-icon" onclick="event.stopPropagation(); editGroup({{ group.id }})"
-                    title="Edit Group">
+            <!-- Icon Buttons Row -->
+            <div class="user-card-actions-icons">
+                <button class="btn-icon" title="Edit Group"
+                    onclick="event.stopPropagation(); editGroup({{ group.id }})">
                     ✏️
                 </button>
-                <button class="btn btn-icon"
-                    onclick="event.stopPropagation(); deleteGroup({{ group.id }}, '{{ group.name }}')"
-                    title="Delete Group">
+                <button class="btn-icon" title="Delete Group"
+                    onclick="event.stopPropagation(); deleteGroup({{ group.id }}, '{{ group.name }}')">
                     🗑️
                 </button>
             </div>
@@ -200,8 +201,10 @@
 
         <!-- Actions -->
         <div class="user-card-actions">
-            <div class="user-card-actions-left">
-                <a href="/user/{{ user.platform }}/{{ user.username }}" class="btn btn-secondary">
+            <!-- Main Buttons Row -->
+            <div class="user-card-actions-main">
+                <a href="/user/{{ user.platform }}/{{ user.username }}" class="btn btn-secondary"
+                    onclick="event.stopPropagation()">
                     👁️ View
                 </a>
                 <button class="btn btn-primary"
@@ -209,37 +212,42 @@
                     🔄 Sync
                 </button>
             </div>
-            <div class="user-card-actions-right">
-                <button class="btn btn-icon debug-only" title="Refresh Avatar (Debug)"
+            <!-- Icon Buttons Row -->
+            <div class="user-card-actions-icons">
+                <!-- Debug Buttons -->
+                <button class="btn-icon debug-only" title="Refresh Avatar"
                     onclick="event.stopPropagation(); refreshUserAvatar({{ user.id }}, '{{ user.username }}', '{{ user.platform }}')">
                     🖼️
                 </button>
-                <button class="btn btn-icon debug-only" title="Assign Cookie (Debug)"
+                <button class="btn-icon debug-only" title="Assign Cookie"
                     onclick="event.stopPropagation(); assignUserCookie({{ user.id }}, '{{ user.username }}', '{{ user.platform }}')">
                     🍪
                 </button>
+                <!-- Platform Link -->
                 {% if user.platform == 'instagram' %}
-                <a href="https://instagram.com/{{ display_name }}" target="_blank" class="btn btn-icon"
+                <a href="https://instagram.com/{{ user.username }}" target="_blank" class="btn-icon"
                     title="Open Instagram" onclick="event.stopPropagation()">
                     🔗
                 </a>
                 {% elif user.platform == 'tiktok' %}
-                <a href="https://tiktok.com/@{{ display_name }}" target="_blank" class="btn btn-icon"
-                    title="Open TikTok" onclick="event.stopPropagation()">
+                <a href="https://tiktok.com/@{{ user.username }}" target="_blank" class="btn-icon" title="Open TikTok"
+                    onclick="event.stopPropagation()">
                     🔗
                 </a>
                 {% elif user.platform == 'coomer' %}
-                <a href="https://coomer.st/{{ user.username.replace('/', '/user/') }}" target="_blank"
-                    class="btn btn-icon" title="Open Coomer" onclick="event.stopPropagation()">
+                <a href="https://coomer.st/{{ user.username.replace('/', '/user/') }}" target="_blank" class="btn-icon"
+                    title="Open Coomer" onclick="event.stopPropagation()">
                     🔗
                 </a>
                 {% endif %}
-                <a href="/api/users/{{ user.id }}/download-zip" class="btn btn-icon" title="Download as ZIP"
+                <!-- Download ZIP -->
+                <a href="/api/users/{{ user.id }}/download-zip" class="btn-icon" title="Download ZIP"
                     onclick="event.stopPropagation()">
                     📦
                 </a>
-                <button class="btn btn-icon"
-                    onclick="event.stopPropagation(); deleteUser({{ user.id }}, '{{ user.username }}')" title="Delete">
+                <!-- Delete -->
+                <button class="btn-icon" title="Delete"
+                    onclick="event.stopPropagation(); deleteUser({{ user.id }}, '{{ user.username }}')">
                     🗑️
                 </button>
             </div>

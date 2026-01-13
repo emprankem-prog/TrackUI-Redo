@@ -1036,19 +1036,52 @@ def scheduler_loop():
             time.sleep(60)
 
 def sync_all_users():
-    """Sync all tracked users"""
+    """Sync all tracked users and profile groups"""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT username, platform FROM users')
-    users = cursor.fetchall()
+    
+    # Get users that are in groups (to avoid duplicate syncs)
+    cursor.execute('SELECT DISTINCT user_id FROM group_members')
+    grouped_user_ids = set(row['user_id'] for row in cursor.fetchall())
+    
+    # Get all individual users NOT in any group
+    cursor.execute('SELECT id, username, platform FROM users')
+    all_users = cursor.fetchall()
+    ungrouped_users = [u for u in all_users if u['id'] not in grouped_user_ids]
+    
+    # Get all profile groups
+    cursor.execute('SELECT id, name FROM profile_groups')
+    groups = cursor.fetchall()
+    
     conn.close()
     
-    send_telegram_notification(f"🔄 Starting bulk sync for {len(users)} users...")
+    total_syncs = len(ungrouped_users) + sum(1 for _ in grouped_user_ids)
+    send_telegram_notification(f"🔄 Starting scheduled sync: {len(ungrouped_users)} individual users + {len(groups)} groups ({len(grouped_user_ids)} grouped users)")
     
-    for user in users:
+    # Sync individual users NOT in groups
+    for user in ungrouped_users:
         add_to_queue(user['username'], user['platform'])
     
-    return len(users)
+    # Sync groups (which syncs all group members)
+    for group in groups:
+        try:
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT u.username, u.platform 
+                FROM users u
+                JOIN group_members gm ON u.id = gm.user_id
+                WHERE gm.group_id = ?
+            ''', (group['id'],))
+            members = cursor.fetchall()
+            conn.close()
+            
+            for member in members:
+                add_to_queue(member['username'], member['platform'])
+        except Exception as e:
+            print(f"[Scheduler] Error syncing group {group['name']}: {e}")
+    
+    return total_syncs
 
 # =============================================================================
 # Telegram Bot
@@ -1689,11 +1722,15 @@ def init_telegram_bot():
                 )
                 telegram_bot.answer_callback_query(call.id)
         
-        # Start polling in background thread
-        telegram_thread = threading.Thread(
-            target=lambda: telegram_bot.infinity_polling(timeout=60),
-            daemon=True
-        )
+        # Start polling in background thread (suppress errors for dev environments)
+        def start_polling():
+            try:
+                telegram_bot.infinity_polling(timeout=60, logger_level=None)
+            except Exception as e:
+                # Silently ignore polling errors (e.g., when another bot instance is running)
+                pass
+        
+        telegram_thread = threading.Thread(target=start_polling, daemon=True)
         telegram_thread.start()
         
         return True
@@ -3416,15 +3453,34 @@ self.addEventListener('fetch', event => {
 # =============================================================================
 
 if __name__ == '__main__':
+    import logging
+    
+    # Suppress frequent API endpoint logging (queue polling spam)
+    class QueueLogFilter(logging.Filter):
+        def filter(self, record):
+            if '/api/queue' in record.getMessage():
+                return False
+            return True
+    
+    # Apply filter to werkzeug logger
+    log = logging.getLogger('werkzeug')
+    log.addFilter(QueueLogFilter())
+    
+    # Suppress TeleBot error logs (for dev when another bot instance is running)
+    logging.getLogger('TeleBot').setLevel(logging.CRITICAL)
+    
     # Initialize database
     init_db()
     
-    # Start scheduler if enabled
-    if get_setting('scheduler_enabled') == 'true':
-        start_scheduler()
-    
-    # Initialize Telegram bot
-    init_telegram_bot()
+    # Only start background services in the main process (not reloader child)
+    # Flask debug mode creates two processes - check WERKZEUG_RUN_MAIN
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+        # Start scheduler if enabled
+        if get_setting('scheduler_enabled') == 'true':
+            start_scheduler()
+        
+        # Initialize Telegram bot
+        init_telegram_bot()
     
     # Run Flask
     app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)

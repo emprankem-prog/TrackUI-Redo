@@ -370,56 +370,60 @@ img {
     background: var(--bg-tertiary);
 }
 
-/* User Card Actions */
+/* User Card Actions - Modern Two-Row Layout */
 .user-card-actions {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
     gap: var(--space-sm);
-    padding: var(--space-sm) var(--space-md);
+    padding: var(--space-md);
     background: var(--bg-tertiary);
     border-top: 1px solid var(--border-color);
+}
+
+.user-card-actions-main {
+    display: flex;
+    gap: var(--space-sm);
+    width: 100%;
+}
+
+.user-card-actions-main .btn {
+    flex: 1;
+    padding: var(--space-sm) var(--space-md);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    border-radius: var(--border-radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
+}
+
+.user-card-actions-icons {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-xs);
     flex-wrap: wrap;
 }
 
-.user-card-actions .btn {
-    flex: 0 0 auto;
-}
-
-.user-card-actions .btn-primary,
-.user-card-actions .btn-secondary {
-    padding: var(--space-xs) var(--space-sm);
-    font-size: var(--font-size-xs);
-    border-radius: var(--border-radius-md);
-}
-
-.user-card-actions .btn-icon {
-    width: 28px;
-    height: 28px;
+.user-card-actions-icons .btn-icon {
+    width: 36px;
+    height: 36px;
     padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: var(--border-radius-sm);
+    border-radius: var(--border-radius-md);
     background: var(--bg-elevated);
     border: 1px solid var(--border-color);
     transition: all var(--transition-fast);
-    font-size: 12px;
+    font-size: 16px;
+    cursor: pointer;
 }
 
-.user-card-actions .btn-icon:hover {
+.user-card-actions-icons .btn-icon:hover {
     background: var(--accent-primary);
     border-color: var(--accent-primary);
-}
-
-.user-card-actions-left {
-    display: flex;
-    gap: var(--space-xs);
-}
-
-.user-card-actions-right {
-    display: flex;
-    gap: 4px;
+    transform: translateY(-2px);
 }
 
 /* User Card */
