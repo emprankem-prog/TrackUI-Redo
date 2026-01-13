@@ -528,16 +528,6 @@ img {
     min-height: 32px;
 }
 
-.user-card-actions {
-    display: flex;
-    gap: var(--space-sm);
-    padding: var(--space-md);
-}
-
-.user-card-actions .btn {
-    flex: 1;
-}
-
 /* =============================================================================
    Tags / Badges
    ============================================================================= */
@@ -2151,4 +2141,16 @@ img {
 .group-member-item:hover .group-member-arrow {
     transform: translateX(4px);
     color: var(--accent-primary);
+}
+
+/* =============================================================================
+   Debug Mode
+   ============================================================================= */
+
+.debug-only {
+    display: none !important;
+}
+
+body.debug-mode .debug-only {
+    display: inline-flex !important;
 }

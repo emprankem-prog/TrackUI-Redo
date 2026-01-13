@@ -210,6 +210,14 @@
                 </button>
             </div>
             <div class="user-card-actions-right">
+                <button class="btn btn-icon debug-only" title="Refresh Avatar (Debug)"
+                    onclick="event.stopPropagation(); refreshUserAvatar({{ user.id }}, '{{ user.username }}', '{{ user.platform }}')">
+                    🖼️
+                </button>
+                <button class="btn btn-icon debug-only" title="Assign Cookie (Debug)"
+                    onclick="event.stopPropagation(); assignUserCookie({{ user.id }}, '{{ user.username }}', '{{ user.platform }}')">
+                    🍪
+                </button>
                 {% if user.platform == 'instagram' %}
                 <a href="https://instagram.com/{{ display_name }}" target="_blank" class="btn btn-icon"
                     title="Open Instagram" onclick="event.stopPropagation()">

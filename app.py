@@ -136,6 +136,7 @@ def init_db():
             display_name TEXT,
             profile_picture TEXT,
             stats_json TEXT,
+            cookie_file TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_sync TIMESTAMP,
             UNIQUE(username, platform)
@@ -227,6 +228,12 @@ def init_db():
         cursor.execute('''
             INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)
         ''', (key, value))
+    
+    # Migration: Add cookie_file column if it doesn't exist
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN cookie_file TEXT')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     
     conn.commit()
     conn.close()
@@ -329,6 +336,18 @@ def run_download(job):
     username = job['username']
     platform = job['platform']
     
+    # Check for user-specific cookie
+    user_cookie = None
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT cookie_file FROM users WHERE username = ? AND platform = ?', (username, platform))
+    user_row = cursor.fetchone()
+    conn.close()
+    if user_row and user_row['cookie_file']:
+        user_cookie_path = COOKIES_DIR / platform / user_row['cookie_file']
+        if user_cookie_path.exists():
+            user_cookie = str(user_cookie_path)
+    
     # Build output directory
     if job.get('folder'):
         output_dir = DOWNLOADS_DIR / job['folder']
@@ -349,7 +368,8 @@ def run_download(job):
     
     # Platform-specific options
     if platform == 'instagram':
-        cookie_file = get_default_instagram_cookie()
+        # Use user-specific cookie if available, otherwise use default
+        cookie_file = user_cookie or get_default_instagram_cookie()
         if cookie_file:
             cmd.extend(['--cookies', cookie_file])
         
@@ -368,8 +388,8 @@ def run_download(job):
             url = f'https://www.instagram.com/{username}/'
     
     elif platform == 'tiktok':
-        # Add TikTok cookies if available
-        cookie_file = get_default_tiktok_cookie()
+        # Use user-specific cookie if available, otherwise use default
+        cookie_file = user_cookie or get_default_tiktok_cookie()
         if cookie_file:
             cmd.extend(['--cookies', cookie_file])
         
@@ -379,8 +399,8 @@ def run_download(job):
             url = f'https://www.tiktok.com/@{username}'
     
     elif platform == 'coomer':
-        # Add Coomer cookies if available
-        cookie_file = get_default_coomer_cookie()
+        # Use user-specific cookie if available, otherwise use default
+        cookie_file = user_cookie or get_default_coomer_cookie()
         if cookie_file:
             cmd.extend(['--cookies', cookie_file])
         
@@ -718,6 +738,12 @@ def download_avatar_with_gallery_dl(username, platform='instagram'):
         # Add Instagram cookies if available
         if platform == 'instagram':
             cookie_file = get_default_instagram_cookie()
+            if cookie_file:
+                cmd.extend(['--cookies', cookie_file])
+        
+        # Add TikTok cookies if available
+        if platform == 'tiktok':
+            cookie_file = get_default_tiktok_cookie()
             if cookie_file:
                 cmd.extend(['--cookies', cookie_file])
         
@@ -2446,6 +2472,9 @@ def api_user(user_id):
         if 'display_name' in data:
             cursor.execute('UPDATE users SET display_name = ? WHERE id = ?', 
                           (data['display_name'], user_id))
+        if 'cookie_file' in data:
+            cursor.execute('UPDATE users SET cookie_file = ? WHERE id = ?', 
+                          (data['cookie_file'], user_id))
         conn.commit()
         conn.close()
         return jsonify({'success': True})
@@ -2690,6 +2719,34 @@ def api_group(group_id):
         conn.commit()
         conn.close()
         return jsonify({'success': True})
+
+@app.route('/api/users/<int:user_id>/refresh_avatar', methods=['POST'])
+def api_refresh_user_avatar(user_id):
+    """Refresh a single user's avatar"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT username, platform FROM users WHERE id = ?', (user_id,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+        
+    username = user['username']
+    platform = user['platform']
+    
+    # Run in background to not block
+    def refresh_bg():
+        try:
+            print(f"[Avatar Refresh] Downloading avatar for {platform}/{username}")
+            download_avatar_with_gallery_dl(username, platform)
+        except Exception as e:
+            print(f"[Avatar Refresh] Error for {username}: {e}")
+
+    threading.Thread(target=refresh_bg, daemon=True).start()
+    
+    return jsonify({'success': True, 'message': f'Refreshing avatar for {username}'})
 
 @app.route('/api/groups/<int:group_id>/sync', methods=['POST'])
 def api_group_sync(group_id):

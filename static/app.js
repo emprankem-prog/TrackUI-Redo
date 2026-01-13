@@ -12,6 +12,7 @@ const state = {
     tags: [],
     queue: [],
     settings: {},
+    debugMode: false,
     filters: {
         platform: '',
         tag: '',
@@ -34,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     checkFirstTimeSetup();
     initViewMode();
+    initDebugMode();
 });
 
 // View Mode (Grid/List)
@@ -93,6 +95,129 @@ function updateThemeIcon(theme) {
     const btn = document.getElementById('theme-toggle');
     if (btn) {
         btn.textContent = theme === 'dark' ? '🌙' : '☀️';
+    }
+}
+
+// =============================================================================
+// Debug Mode
+// =============================================================================
+
+function initDebugMode() {
+    const enabled = localStorage.getItem('debug_mode') === 'true';
+    state.debugMode = enabled;
+
+    // Update body class
+    if (enabled) {
+        document.body.classList.add('debug-mode');
+    } else {
+        document.body.classList.remove('debug-mode');
+    }
+
+    // Update toggle in settings if it exists
+    const toggle = document.getElementById('debug-mode-enabled');
+    if (toggle) {
+        toggle.checked = enabled;
+    }
+}
+
+function toggleDebugMode() {
+    const enabled = document.getElementById('debug-mode-enabled').checked;
+    state.debugMode = enabled;
+
+    if (enabled) {
+        document.body.classList.add('debug-mode');
+        localStorage.setItem('debug_mode', 'true');
+        showToast('Debug mode enabled', 'info');
+    } else {
+        document.body.classList.remove('debug-mode');
+        localStorage.setItem('debug_mode', 'false');
+        showToast('Debug mode disabled', 'info');
+    }
+}
+
+async function refreshUserAvatar(userId, username, platform) {
+    if (!confirm(`Refresh avatar for ${username}?`)) return;
+
+    try {
+        showToast('Refreshing avatar...', 'info');
+        const response = await fetch(`/api/users/${userId}/refresh_avatar`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showToast('Avatar refresh queued', 'success');
+            // Reload page after a delay to show new avatar
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showToast(data.error || 'Failed to refresh avatar', 'error');
+        }
+    } catch (error) {
+        console.error(error);
+        showToast('Network error', 'error');
+    }
+}
+
+async function assignUserCookie(userId, username, platform) {
+    // Fetch available cookies for this platform
+    try {
+        const response = await fetch(`/api/cookies?platform=${platform}`);
+        const cookies = await response.json();
+
+        let content = '<div class="form-group"><label class="form-label">Select cookie file for this profile:</label>';
+
+        if (!cookies || cookies.length === 0) {
+            content += '<p class="text-muted">No cookies available for this platform. Upload one in Settings first.</p>';
+        } else {
+            content += '<div class="flex flex-col gap-sm">';
+            // Option to use default (no specific cookie)
+            content += `
+                <button class="btn btn-secondary" onclick="setUserCookie(${userId}, null); closeAllModals();">
+                    <span>🔄 Use Default Cookie</span>
+                </button>
+            `;
+            // List available cookies
+            cookies.forEach(cookie => {
+                const isDefault = cookie.is_default ? ' (Default)' : '';
+                content += `
+                    <button class="btn btn-secondary" onclick="setUserCookie(${userId}, '${cookie.filename}'); closeAllModals();">
+                        <span>🍪 ${cookie.filename}${isDefault}</span>
+                    </button>
+                `;
+            });
+            content += '</div>';
+        }
+        content += '</div>';
+
+        const modal = document.getElementById('tag-assign-modal');
+        if (modal) {
+            modal.querySelector('.modal-title').textContent = `Assign Cookie - ${username}`;
+            modal.querySelector('.modal-body').innerHTML = content;
+            openModal('tag-assign-modal');
+        }
+    } catch (error) {
+        console.error(error);
+        showToast('Failed to load cookies', 'error');
+    }
+}
+
+async function setUserCookie(userId, cookieFile) {
+    try {
+        const response = await fetch(`/api/users/${userId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cookie_file: cookieFile })
+        });
+
+        if (response.ok) {
+            showToast(cookieFile ? `Cookie "${cookieFile}" assigned` : 'Using default cookie', 'success');
+        } else {
+            showToast('Failed to assign cookie', 'error');
+        }
+    } catch (error) {
+        console.error(error);
+        showToast('Network error', 'error');
     }
 }
 
