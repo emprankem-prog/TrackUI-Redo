@@ -693,10 +693,65 @@ def download_avatar_with_gallery_dl(username, platform='instagram'):
             if existing.exists():
                 return str(existing)
         
-        # Set correct URL based on platform
+        # Try platform-specific direct methods first (faster, no auth needed)
+        
+        # === INSTAGRAM: Use web_profile_info API ===
         if platform == 'instagram':
+            try:
+                api_url = f'https://i.instagram.com/api/v1/users/web_profile_info/?username={username}'
+                headers = {
+                    'User-Agent': 'Instagram 76.0.0.15.395 Android',
+                    'x-ig-app-id': '936619743392459'
+                }
+                response = requests.get(api_url, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    avatar_url = (data.get('data', {}).get('user', {}).get('profile_pic_url_hd') or 
+                                  data.get('data', {}).get('user', {}).get('profile_pic_url'))
+                    if avatar_url:
+                        # Download the avatar
+                        img_response = requests.get(avatar_url, headers={'User-Agent': USER_AGENTS[0]}, timeout=10)
+                        if img_response.status_code == 200:
+                            content_type = img_response.headers.get('content-type', 'image/jpeg')
+                            ext = '.jpg' if 'jpeg' in content_type else ('.png' if 'png' in content_type else '.jpg')
+                            output_file = AVATARS_DIR / f"{platform}_{username}{ext}"
+                            output_file.write_bytes(img_response.content)
+                            print(f"[Avatar] Downloaded Instagram avatar via API: {username}")
+                            return str(output_file)
+            except Exception as e:
+                print(f"[Avatar] Instagram API failed for {username}: {e}")
+            
+            # Fallback URL for gallery-dl
             url = f"https://www.instagram.com/{username}/avatar/"
+        
+        # === TIKTOK: Scrape from embedded JSON ===
         elif platform == 'tiktok':
+            try:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+                response = requests.get(f'https://www.tiktok.com/@{username}', headers=headers, timeout=15)
+                if response.status_code == 200:
+                    # Extract JSON from __UNIVERSAL_DATA_FOR_REHYDRATION__ script
+                    match = re.search(r'<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([^<]+)</script>', response.text)
+                    if match:
+                        data = json.loads(match.group(1))
+                        user = data.get('__DEFAULT_SCOPE__', {}).get('webapp.user-detail', {}).get('userInfo', {}).get('user', {})
+                        avatar_url = user.get('avatarLarger') or user.get('avatarMedium') or user.get('avatarThumb')
+                        if avatar_url:
+                            # Download the avatar
+                            img_response = requests.get(avatar_url, headers=headers, timeout=10)
+                            if img_response.status_code == 200:
+                                content_type = img_response.headers.get('content-type', 'image/jpeg')
+                                ext = '.jpg' if 'jpeg' in content_type else ('.png' if 'png' in content_type else '.jpg')
+                                output_file = AVATARS_DIR / f"{platform}_{username}{ext}"
+                                output_file.write_bytes(img_response.content)
+                                print(f"[Avatar] Downloaded TikTok avatar via scraping: {username}")
+                                return str(output_file)
+            except Exception as e:
+                print(f"[Avatar] TikTok scraping failed for {username}: {e}")
+            
+            # Fallback URL for gallery-dl
             url = f"https://www.tiktok.com/@{username}"
         elif platform == 'coomer':
             # Coomer avatars use direct URL: https://img.coomer.st/icons/{service}/{username}
