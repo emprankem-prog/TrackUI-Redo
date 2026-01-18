@@ -205,12 +205,47 @@ sudo chown -R $USER:$USER data/
 chmod -R 755 data/
 ```
 
-### Update the application
+---
+
+## Updating from GitHub
+
+If you cloned from Git, updating is just **3 commands**:
+
 ```bash
-git pull  # If using git
-docker compose build --no-cache
+cd ~/trackui
+git pull origin main
+docker compose build
 docker compose up -d
 ```
+
+### One-Command Update Script
+
+Create `~/update-trackui.sh`:
+```bash
+#!/bin/bash
+cd ~/trackui
+echo "📥 Pulling latest changes..."
+git pull origin main
+echo "🔨 Rebuilding container..."
+docker compose build
+echo "🚀 Restarting..."
+docker compose down && docker compose up -d
+echo "✅ Update complete!"
+```
+
+Make executable and use:
+```bash
+chmod +x ~/update-trackui.sh
+~/update-trackui.sh
+```
+
+### What's Preserved During Updates?
+
+| ✅ Preserved | 🔄 Replaced |
+|--------------|-------------|
+| Database, Downloads, Cookies, Avatars | App code, Docker image |
+
+Your data is safe — it's in the `./data` volume mount!
 
 ---
 
