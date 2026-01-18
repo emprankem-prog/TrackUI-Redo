@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+ENV
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Data (mounted as volume)
+data/downloads/*
+data/avatars/*
+data/banners/*
+
+# Keep structure but ignore content
+!data/.gitkeep
+
+# Misc
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

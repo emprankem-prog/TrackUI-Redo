@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  trackui:
+    build: .
+    container_name: trackui
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      # Persist data directory (database, downloads, cookies, avatars)
+      - ./data:/app/data
+      # Optional: Mount gallery-dl config
+      - ./gallery-dl.conf:/app/gallery-dl.conf:ro
+    environment:
+      - TZ=Asia/Jerusalem  # Change to your timezone
+      - FLASK_ENV=production
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
