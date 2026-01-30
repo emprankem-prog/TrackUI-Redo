@@ -902,6 +902,8 @@ function renderQueueItem(job) {
         actions = `<button class="btn btn-ghost btn-icon" onclick="resumeDownload(${job.id})" title="Resume">▶️</button>`;
     } else if (job.status === 'queued') {
         actions = `<button class="btn btn-ghost btn-icon" onclick="cancelDownload(${job.id})" title="Cancel">✕</button>`;
+    } else if (job.status === 'failed') {
+        actions = `<button class="btn btn-ghost btn-icon" onclick="retryDownload(${job.id})" title="Retry">🔄</button>`;
     }
 
     return `
@@ -1119,6 +1121,12 @@ function populateSettingsForm() {
         schedulerInterval.value = state.settings.scheduler_interval || 'daily';
     }
 
+    // Notifications master toggle
+    const notificationsEnabled = document.getElementById('notifications-enabled');
+    if (notificationsEnabled) {
+        notificationsEnabled.checked = state.settings.notifications_enabled !== 'false';
+    }
+
     // Telegram
     const telegramToken = document.getElementById('telegram-token');
     const telegramChatId = document.getElementById('telegram-chat-id');
@@ -1130,10 +1138,46 @@ function populateSettingsForm() {
         telegramChatId.value = state.settings.telegram_chat_id || '';
     }
 
+    // Discord Webhook
+    const discordWebhook = document.getElementById('discord-webhook-url');
+    if (discordWebhook) {
+        discordWebhook.value = state.settings.discord_webhook_url || '';
+    }
+
+    // Auto-retry settings
+    const retryEnabled = document.getElementById('retry-enabled');
+    const retryMaxAttempts = document.getElementById('retry-max-attempts');
+    const retryDelaySeconds = document.getElementById('retry-delay-seconds');
+
+    if (retryEnabled) {
+        retryEnabled.checked = state.settings.retry_enabled !== 'false';
+    }
+    if (retryMaxAttempts) {
+        retryMaxAttempts.value = state.settings.retry_max_attempts || '3';
+    }
+    if (retryDelaySeconds) {
+        retryDelaySeconds.value = state.settings.retry_delay_seconds || '30';
+    }
+
+    // Encryption settings
+    const encryptionEnabled = document.getElementById('encryption-enabled');
+    if (encryptionEnabled) {
+        encryptionEnabled.checked = state.settings.encryption_enabled === 'true';
+    }
+
+    // Check encryption availability
+    checkEncryptionStatus();
+
     // Downloads
     const maxConcurrent = document.getElementById('max-concurrent');
     if (maxConcurrent) {
         maxConcurrent.value = state.settings.max_concurrent_downloads || '2';
+    }
+
+    // TikTok Engine (Debug Mode)
+    const tiktokEngine = document.getElementById('tiktok-engine');
+    if (tiktokEngine) {
+        tiktokEngine.value = state.settings.tiktok_engine || 'auto';
     }
 
     // Auto-lock settings from localStorage
@@ -1152,6 +1196,29 @@ function populateSettingsForm() {
     }
 }
 
+async function checkEncryptionStatus() {
+    const statusEl = document.getElementById('encryption-status');
+    const toggleEl = document.getElementById('encryption-enabled');
+
+    if (!statusEl) return;
+
+    try {
+        const response = await fetch('/api/encryption-status');
+        const data = await response.json();
+
+        if (data.available) {
+            statusEl.textContent = '🟢 Encryption available (cryptography module installed)';
+            statusEl.style.color = 'var(--accent-success)';
+        } else {
+            statusEl.textContent = '🔴 Encryption unavailable - install cryptography: pip install cryptography';
+            statusEl.style.color = 'var(--accent-danger)';
+            if (toggleEl) toggleEl.disabled = true;
+        }
+    } catch (error) {
+        statusEl.textContent = 'Could not check encryption status';
+    }
+}
+
 async function saveSettings(event) {
     event.preventDefault();
 
@@ -1159,9 +1226,20 @@ async function saveSettings(event) {
         scheduler_enabled: document.getElementById('scheduler-enabled')?.checked ? 'true' : 'false',
         scheduler_time: document.getElementById('scheduler-time')?.value || '03:00',
         scheduler_interval: document.getElementById('scheduler-interval')?.value || 'daily',
+        // Notifications
+        notifications_enabled: document.getElementById('notifications-enabled')?.checked ? 'true' : 'false',
         telegram_bot_token: document.getElementById('telegram-token')?.value || '',
         telegram_chat_id: document.getElementById('telegram-chat-id')?.value || '',
-        max_concurrent_downloads: document.getElementById('max-concurrent')?.value || '2'
+        discord_webhook_url: document.getElementById('discord-webhook-url')?.value || '',
+        // Auto-retry
+        retry_enabled: document.getElementById('retry-enabled')?.checked ? 'true' : 'false',
+        retry_max_attempts: document.getElementById('retry-max-attempts')?.value || '3',
+        retry_delay_seconds: document.getElementById('retry-delay-seconds')?.value || '30',
+        // Encryption
+        encryption_enabled: document.getElementById('encryption-enabled')?.checked ? 'true' : 'false',
+        // Downloads
+        max_concurrent_downloads: document.getElementById('max-concurrent')?.value || '2',
+        tiktok_engine: document.getElementById('tiktok-engine')?.value || 'auto'
     };
 
     try {
@@ -1407,20 +1485,22 @@ async function setupNextStep() {
         localStorage.setItem('auto_lock_enabled', autoLockOn ? 'true' : 'false');
         localStorage.setItem('auto_lock_delay', autoLockDelayVal || '5');
     } else if (setupCurrentStep === 4) {
-        // Save Telegram settings
+        // Save notification settings
+        const notificationsEnabled = document.getElementById('setup-notifications-enabled')?.checked;
         const token = document.getElementById('setup-telegram-token').value;
         const chatId = document.getElementById('setup-telegram-chat').value;
+        const discordWebhook = document.getElementById('setup-discord-webhook')?.value || '';
 
-        if (token || chatId) {
-            await fetch('/api/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    telegram_bot_token: token,
-                    telegram_chat_id: chatId
-                })
-            });
-        }
+        await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                notifications_enabled: notificationsEnabled ? 'true' : 'false',
+                telegram_bot_token: token,
+                telegram_chat_id: chatId,
+                discord_webhook_url: discordWebhook
+            })
+        });
     } else if (setupCurrentStep === 5) {
         // Save scheduler settings
         const enabled = document.getElementById('setup-scheduler-enabled').checked;
@@ -2524,5 +2604,181 @@ async function deleteGroup(groupId, groupName) {
         }
     } catch (error) {
         showToast('Failed to delete group', 'error');
+    }
+}
+
+// =============================================================================
+// Audit Log
+// =============================================================================
+
+let auditLogs = [];
+let auditLogOffset = 0;
+
+async function loadAuditLog() {
+    auditLogOffset = 0;
+    try {
+        const response = await fetch('/api/audit-log?limit=50');
+        auditLogs = await response.json();
+        renderAuditLog();
+    } catch (error) {
+        showToast('Failed to load audit log', 'error');
+    }
+}
+
+async function loadMoreAuditLogs() {
+    auditLogOffset += 50;
+    try {
+        const response = await fetch(`/api/audit-log?limit=50&offset=${auditLogOffset}`);
+        const moreLogs = await response.json();
+        auditLogs = [...auditLogs, ...moreLogs];
+        renderAuditLog();
+    } catch (error) {
+        showToast('Failed to load more logs', 'error');
+    }
+}
+
+function renderAuditLog() {
+    const container = document.getElementById('audit-log-list');
+    if (!container) return;
+
+    const searchTerm = document.getElementById('audit-log-search')?.value?.toLowerCase() || '';
+    const filterAction = document.getElementById('audit-log-filter')?.value || '';
+
+    const filteredLogs = auditLogs.filter(log => {
+        if (filterAction && log.action !== filterAction) return false;
+        if (searchTerm) {
+            const details = JSON.stringify(log.details || '').toLowerCase();
+            return log.action.toLowerCase().includes(searchTerm) || details.includes(searchTerm);
+        }
+        return true;
+    });
+
+    if (filteredLogs.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">No audit log entries found</p>';
+        return;
+    }
+
+    container.innerHTML = filteredLogs.map(log => {
+        const icon = getAuditLogIcon(log.action);
+        const details = log.details ? JSON.parse(log.details) : {};
+        const time = new Date(log.created_at).toLocaleString();
+
+        return `
+            <div class="audit-log-item action-${log.action}">
+                <div class="audit-log-icon">${icon}</div>
+                <div class="audit-log-content">
+                    <div class="audit-log-action">${log.action.replace(/_/g, ' ')}</div>
+                    <div class="audit-log-details">
+                        ${details.username ? `@${details.username}` : ''}
+                        ${details.platform ? `(${details.platform})` : ''}
+                        ${details.files_downloaded ? `${details.files_downloaded} files` : ''}
+                        ${details.error ? `Error: ${details.error.substring(0, 60)}...` : ''}
+                    </div>
+                </div>
+                <div class="audit-log-time">${time}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function getAuditLogIcon(action) {
+    const icons = {
+        'user_added': '➕',
+        'user_deleted': '🗑️',
+        'user_archived': '📦',
+        'user_unarchived': '📤',
+        'download_completed': '✅',
+        'download_failed': '❌',
+        'download_retry': '🔄',
+        'download_manual_retry': '🔁'
+    };
+    return icons[action] || '📋';
+}
+
+function filterAuditLog() {
+    renderAuditLog();
+}
+
+function exportAuditLog() {
+    window.location.href = '/api/audit-log/export';
+}
+
+async function clearAuditLog() {
+    const days = prompt('Delete logs older than how many days?', '30');
+    if (!days) return;
+
+    try {
+        const response = await fetch(`/api/audit-log?days=${days}`, {
+            method: 'DELETE'
+        });
+        const data = await response.json();
+        showToast(`Deleted ${data.deleted} old log entries`, 'success');
+        loadAuditLog();
+    } catch (error) {
+        showToast('Failed to clear audit log', 'error');
+    }
+}
+
+// =============================================================================
+// Archive/Unarchive Users
+// =============================================================================
+
+async function toggleArchiveUser(userId, username) {
+    try {
+        const response = await fetch(`/api/users/${userId}/archive`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+            showToast(data.message, 'success');
+            location.reload();
+        } else {
+            showToast(data.error || 'Failed to toggle archive status', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+// =============================================================================
+// Manual Retry Download
+// =============================================================================
+
+async function retryDownload(queueId) {
+    try {
+        const response = await fetch(`/api/queue/${queueId}/retry`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            showToast('Download re-queued', 'success');
+            updateQueue();
+        } else {
+            showToast('Failed to retry download', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
+    }
+}
+
+// =============================================================================
+// Test Notification
+// =============================================================================
+
+async function testNotification() {
+    try {
+        const response = await fetch('/api/test-notification', {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+            showToast(data.message || 'Test notification sent!', 'success');
+        } else {
+            showToast(data.error || 'Failed to send notification', 'error');
+        }
+    } catch (error) {
+        showToast('Network error', 'error');
     }
 }

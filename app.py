@@ -23,6 +23,14 @@ from flask import (
 )
 import hashlib
 import requests
+import base64
+
+# Optional Encryption
+try:
+    from cryptography.fernet import Fernet
+    ENCRYPTION_AVAILABLE = True
+except ImportError:
+    ENCRYPTION_AVAILABLE = False
 
 # Optional Telegram Bot
 try:
@@ -213,6 +221,18 @@ def init_db():
         )
     ''')
     
+    # Audit Log table - tracks all actions
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            entity_type TEXT,
+            entity_id INTEGER,
+            details TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     # Insert default settings
     default_settings = {
         'scheduler_enabled': 'false',
@@ -221,7 +241,18 @@ def init_db():
         'max_concurrent_downloads': '2',
         'telegram_bot_token': '',
         'telegram_chat_id': '',
-        'default_instagram_cookie': ''
+        'default_instagram_cookie': '',
+        'tiktok_engine': 'auto',  # Options: auto, yt-dlp, gallery-dl
+        # Discord webhook
+        'discord_webhook_url': '',
+        'notifications_enabled': 'true',  # Master toggle for all notifications
+        # Auto-retry settings
+        'retry_enabled': 'true',
+        'retry_max_attempts': '3',
+        'retry_delay_seconds': '30',
+        # Encryption
+        'encryption_enabled': 'false',
+        'encryption_key': ''
     }
     
     for key, value in default_settings.items():
@@ -232,6 +263,12 @@ def init_db():
     # Migration: Add cookie_file column if it doesn't exist
     try:
         cursor.execute('ALTER TABLE users ADD COLUMN cookie_file TEXT')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+    
+    # Migration: Add is_archived column if it doesn't exist
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN is_archived BOOLEAN DEFAULT 0')
     except sqlite3.OperationalError:
         pass  # Column already exists
     
@@ -258,6 +295,130 @@ def set_setting(key, value):
     conn.close()
 
 # =============================================================================
+# Audit Log
+# =============================================================================
+
+def log_action(action, entity_type=None, entity_id=None, details=None):
+    """Log an action to the audit log"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO audit_log (action, entity_type, entity_id, details)
+            VALUES (?, ?, ?, ?)
+        ''', (action, entity_type, entity_id, json.dumps(details) if details else None))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Audit log error: {e}")
+
+def get_audit_logs(limit=100, offset=0):
+    """Get audit log entries"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?
+    ''', (limit, offset))
+    logs = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return logs
+
+def clear_audit_logs(days_old=30):
+    """Clear audit logs older than specified days"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        DELETE FROM audit_log WHERE created_at < datetime('now', ? || ' days')
+    ''', (f'-{days_old}',))
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
+
+# =============================================================================
+# Encryption Utilities
+# =============================================================================
+
+def get_or_create_encryption_key():
+    """Get or create the encryption key"""
+    if not ENCRYPTION_AVAILABLE:
+        return None
+    key = get_setting('encryption_key')
+    if not key:
+        key = Fernet.generate_key().decode()
+        set_setting('encryption_key', key)
+    return key
+
+def encrypt_data(data):
+    """Encrypt string data using Fernet"""
+    if not ENCRYPTION_AVAILABLE or not get_setting('encryption_enabled') == 'true':
+        return data
+    try:
+        key = get_or_create_encryption_key()
+        if not key:
+            return data
+        f = Fernet(key.encode())
+        if isinstance(data, str):
+            data = data.encode()
+        encrypted = f.encrypt(data)
+        return base64.b64encode(encrypted).decode()
+    except Exception as e:
+        print(f"Encryption error: {e}")
+        return data
+
+def decrypt_data(encrypted_data):
+    """Decrypt data using Fernet"""
+    if not ENCRYPTION_AVAILABLE:
+        return encrypted_data
+    try:
+        key = get_or_create_encryption_key()
+        if not key:
+            return encrypted_data
+        f = Fernet(key.encode())
+        decoded = base64.b64decode(encrypted_data.encode())
+        decrypted = f.decrypt(decoded)
+        return decrypted.decode()
+    except Exception:
+        # If decryption fails, return original (might not be encrypted)
+        return encrypted_data
+
+# =============================================================================
+# Discord Webhook
+# =============================================================================
+
+def send_discord_notification(message, embed=None):
+    """Send a Discord webhook notification"""
+    webhook_url = get_setting('discord_webhook_url', '')
+    if not webhook_url:
+        return False
+    
+    # Clean message for Discord (remove markdown asterisks for bold)
+    clean_message = message.replace('*', '**')  # Convert to Discord bold
+    
+    payload = {'content': clean_message}
+    if embed:
+        payload['embeds'] = [embed]
+    
+    try:
+        response = requests.post(webhook_url, json=payload, timeout=10)
+        return response.status_code in [200, 204]
+    except Exception as e:
+        print(f"Discord webhook error: {e}")
+        return False
+
+def send_notification(message, embed=None):
+    """Send notification to all enabled channels (Telegram and Discord)"""
+    notifications_enabled = get_setting('notifications_enabled', 'true') == 'true'
+    if not notifications_enabled:
+        return
+    
+    # Send to Telegram
+    send_telegram_notification(message)
+    
+    # Send to Discord
+    send_discord_notification(message, embed)
+
+# =============================================================================
 # Download Engine
 # =============================================================================
 
@@ -268,8 +429,9 @@ def get_next_queue_id():
         queue_id_counter += 1
         return queue_id_counter
 
-def add_to_queue(username, platform, url=None, folder=None, password=None):
+def add_to_queue(username, platform, url=None, folder=None, password=None, retry_count=0):
     """Add a download job to the queue"""
+    max_retries = int(get_setting('retry_max_attempts', '3'))
     job = {
         'id': get_next_queue_id(),
         'username': username,
@@ -283,7 +445,10 @@ def add_to_queue(username, platform, url=None, folder=None, password=None):
         'process': None,
         'started_at': None,
         'completed_at': None,
-        'files_downloaded': 0
+        'files_downloaded': 0,
+        'files_skipped': 0,  # Track skipped files for incremental sync feedback
+        'retry_count': retry_count,
+        'max_retries': max_retries
     }
     
     with queue_lock:
@@ -388,15 +553,24 @@ def run_download(job):
             url = f'https://www.instagram.com/{username}/'
     
     elif platform == 'tiktok':
-        # Use user-specific cookie if available, otherwise use default
+        # Check which engine to use from settings
+        tiktok_engine = get_setting('tiktok_engine', 'auto')
         cookie_file = user_cookie or get_default_tiktok_cookie()
-        if cookie_file:
-            cmd.extend(['--cookies', cookie_file])
         
         if job.get('url'):
             url = job['url']
         else:
             url = f'https://www.tiktok.com/@{username}'
+        
+        # Route based on engine setting
+        if tiktok_engine == 'gallery-dl':
+            # Use gallery-dl path (continue with gallery-dl command below)
+            if cookie_file:
+                cmd.extend(['--cookies', cookie_file])
+        else:
+            # Use yt-dlp (auto or explicit yt-dlp)
+            run_tiktok_download(job, output_dir, url, cookie_file, username)
+            return
     
     elif platform == 'coomer':
         # Use user-specific cookie if available, otherwise use default
@@ -447,6 +621,7 @@ def run_download(job):
         
         job['process'] = process
         files_count = 0
+        skipped_count = 0  # Track skipped files for incremental sync
         last_activity = time.time()
         timeout_minutes = 10
         error_lines = []  # Collect error output for debugging
@@ -475,7 +650,9 @@ def run_download(job):
                     job['files_downloaded'] = files_count
                     job['message'] = f'Downloaded {files_count} files...'
                 elif 'Skipping' in line:
-                    job['message'] = line[:80]
+                    skipped_count += 1
+                    job['files_skipped'] = skipped_count
+                    job['message'] = f'Skipped {skipped_count} (already archived)...'
                 elif 'error' in line.lower() or 'Error' in line:
                     job['message'] = f'Error: {line[:60]}'
                 else:
@@ -495,10 +672,22 @@ def run_download(job):
         
         if process.returncode == 0:
             job['status'] = 'completed'
-            job['message'] = f'Completed! Downloaded {files_count} files'
+            skipped = job.get('files_skipped', 0)
+            if skipped > 0 and files_count > 0:
+                job['message'] = f'Completed! Downloaded {files_count}, skipped {skipped} (archived)'
+            elif skipped > 0:
+                job['message'] = f'Up to date! Skipped {skipped} (already archived)'
+            else:
+                job['message'] = f'Completed! Downloaded {files_count} files'
             
             # Update user's last_sync
             update_user_last_sync(username, platform)
+            
+            # Log success to audit log
+            log_action('download_completed', 'user', None, {
+                'username': username, 'platform': platform, 
+                'files_downloaded': files_count, 'files_skipped': skipped
+            })
         else:
             job['status'] = 'failed'
             # Store error log and provide more helpful message
@@ -524,7 +713,29 @@ def run_download(job):
         job['completed_at'] = datetime.now().isoformat()
         job['process'] = None
         
-        # Send Telegram notification if enabled
+        # Check for auto-retry on failure
+        if job['status'] == 'failed':
+            retry_enabled = get_setting('retry_enabled', 'true') == 'true'
+            retry_count = job.get('retry_count', 0)
+            max_retries = job.get('max_retries', 3)
+            
+            if retry_enabled and retry_count < max_retries:
+                retry_delay = int(get_setting('retry_delay_seconds', '30'))
+                job['message'] = f'Retrying in {retry_delay}s... (attempt {retry_count + 1}/{max_retries})'
+                
+                def retry_job():
+                    time.sleep(retry_delay)
+                    add_to_queue(username, platform, job.get('url'), job.get('folder'), 
+                                job.get('password'), retry_count + 1)
+                
+                threading.Thread(target=retry_job, daemon=True).start()
+                log_action('download_retry', 'user', None, {
+                    'username': username, 'platform': platform, 
+                    'attempt': retry_count + 1, 'max_retries': max_retries
+                })
+                return  # Don't send failure notification yet
+        
+        # Send notification (Telegram and Discord)
         emoji = '📸' if platform == 'instagram' else ('🎵' if platform == 'tiktok' else '💖')
         
         # Clean display name for Coomer
@@ -533,20 +744,28 @@ def run_download(job):
             display_username = username.split('/')[1]
         
         if job['status'] == 'completed':
+            skipped = job.get('files_skipped', 0)
             if files_count > 0:
                 # New content downloaded!
-                send_telegram_notification(
+                send_notification(
                     f"✅ *{emoji} {display_username}*\n"
                     f"📥 Downloaded {files_count} new files!"
                 )
             else:
-                send_telegram_notification(
+                send_notification(
                     f"✅ {emoji} {display_username}: Up to date (no new content)"
                 )
         else:
-            send_telegram_notification(
-                f"❌ {emoji} {display_username}: {job['message']}"
+            retry_count = job.get('retry_count', 0)
+            max_retries = job.get('max_retries', 3)
+            send_notification(
+                f"❌ {emoji} {display_username}: {job['message']}\n"
+                f"(Failed after {retry_count + 1} attempts)"
             )
+            log_action('download_failed', 'user', None, {
+                'username': username, 'platform': platform, 
+                'error': job['message'], 'retries': retry_count
+            })
 
 def run_gofile_download(job, output_dir, url):
     """Execute GoFile download for a job"""
@@ -599,22 +818,152 @@ def run_gofile_download(job, output_dir, url):
         job['completed_at'] = datetime.now().isoformat()
         job['process'] = None
         
-        # Send Telegram notification
+        # Send notification (Telegram and Discord)
         files_count = job.get('files_downloaded', 0)
         
         if job['status'] == 'completed':
             if files_count > 0:
-                send_telegram_notification(
+                send_notification(
                     f"✅ *📦 GoFile Download*\n"
                     f"📥 Downloaded {files_count} files!"
                 )
             else:
-                send_telegram_notification(
+                send_notification(
                     f"✅ 📦 GoFile: No files found"
                 )
         else:
-            send_telegram_notification(
+            send_notification(
                 f"❌ 📦 GoFile: {job['message']}"
+            )
+
+
+def run_tiktok_download(job, output_dir, url, cookie_file, username):
+    """Execute TikTok download using yt-dlp"""
+    try:
+        job['message'] = 'Initializing yt-dlp for TikTok...'
+        
+        # Build yt-dlp command
+        cmd = ['yt-dlp']
+        
+        # Archive file to skip duplicates
+        archive_file = output_dir / '.archive.txt'
+        cmd.extend(['--download-archive', str(archive_file)])
+        
+        # Output template
+        cmd.extend(['-o', str(output_dir / '%(id)s.%(ext)s')])
+        
+        # Add cookies if available
+        if cookie_file:
+            cmd.extend(['--cookies', cookie_file])
+        
+        # Additional options for TikTok
+        cmd.extend([
+            '--no-warnings',
+            '--lazy-playlist',           # Don't fetch entire playlist metadata upfront
+            '--break-on-existing',       # Stop when hitting archived video
+            '-f', 'best',                # Best quality
+            '--ignore-errors',           # Continue on errors
+        ])
+        
+        cmd.append(url)
+        
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            cwd=str(BASE_DIR)
+        )
+        
+        job['process'] = process
+        files_count = 0
+        last_activity = time.time()
+        timeout_minutes = 10
+        
+        for line in iter(process.stdout.readline, ''):
+            if job['status'] == 'paused':
+                process.terminate()
+                job['message'] = 'Download paused'
+                return
+            
+            last_activity = time.time()
+            line = line.strip()
+            
+            if line:
+                # Parse yt-dlp output
+                if '[download]' in line:
+                    if 'Destination' in line:
+                        files_count += 1
+                        job['files_downloaded'] = files_count
+                        job['message'] = f'Downloading file {files_count}...'
+                    elif '100%' in line or '100.0%' in line:
+                        # File completed
+                        job['message'] = f'Downloaded file {files_count}'
+                    elif 'Finished downloading playlist' in line:
+                        job['message'] = 'Playlist complete!'
+                    elif '%' in line:
+                        # Progress update
+                        job['message'] = line[11:60]  # Trim prefix
+                elif 'has already been recorded' in line:
+                    job['message'] = 'Skipping (already downloaded)...'
+                elif '[info]' in line and 'Downloading' in line:
+                    # Starting a new file
+                    files_count += 1
+                    job['files_downloaded'] = files_count
+                elif 'error' in line.lower() or 'Error' in line:
+                    if 'WARNING' not in line:  # Ignore warnings
+                        job['message'] = f'Error: {line[:60]}'
+            
+            # Check timeout
+            if time.time() - last_activity > timeout_minutes * 60:
+                process.terminate()
+                job['status'] = 'failed'
+                job['message'] = f'Timeout after {timeout_minutes} minutes'
+                job['completed_at'] = datetime.now().isoformat()
+                return
+        
+        process.wait()
+        
+        # yt-dlp returns various codes:
+        # 0 = success, 100 = errors in some downloads (but others succeeded), 
+        # 101 = nothing to download (could be all archived)
+        # We consider it success if we downloaded ANY files OR if it's just "already archived"
+        if process.returncode == 0 or files_count > 0 or process.returncode == 101:
+            job['status'] = 'completed'
+            if files_count > 0:
+                job['message'] = f'Completed! Downloaded {files_count} files'
+            else:
+                job['message'] = 'Up to date (no new content)'
+            update_user_last_sync(username, 'tiktok')
+        else:
+            job['status'] = 'failed'
+            job['message'] = f'Failed (exit code {process.returncode})'
+    
+    except Exception as e:
+        job['status'] = 'failed'
+        job['message'] = f'Error: {str(e)}'
+    
+    finally:
+        job['completed_at'] = datetime.now().isoformat()
+        job['process'] = None
+        
+        # Send notification (Telegram and Discord)
+        files_count = job.get('files_downloaded', 0)
+        
+        if job['status'] == 'completed':
+            if files_count > 0:
+                send_notification(
+                    f"✅ *🎵 {username}*\n"
+                    f"📥 Downloaded {files_count} new files!"
+                )
+            else:
+                send_notification(
+                    f"✅ 🎵 {username}: Up to date (no new content)"
+                )
+        else:
+            send_notification(
+                f"❌ 🎵 {username}: {job['message']}"
             )
 
 
@@ -1078,6 +1427,7 @@ def scheduler_loop():
                         should_run = True
                     
                     if should_run:
+                        send_notification(f"⏰ Scheduler triggered at {schedule_time} ({interval})")
                         sync_all_users()
                         # Sleep for 61 seconds to avoid re-triggering
                         time.sleep(61)
@@ -1111,7 +1461,7 @@ def sync_all_users():
     conn.close()
     
     total_syncs = len(ungrouped_users) + sum(1 for _ in grouped_user_ids)
-    send_telegram_notification(f"🔄 Starting scheduled sync: {len(ungrouped_users)} individual users + {len(groups)} groups ({len(grouped_user_ids)} grouped users)")
+    send_notification(f"🔄 Starting Sync All: {len(ungrouped_users)} individual users + {len(groups)} groups ({len(grouped_user_ids)} grouped users)")
     
     # Sync individual users NOT in groups
     for user in ungrouped_users:
@@ -1797,16 +2147,18 @@ def init_telegram_bot():
 def send_telegram_notification(message):
     """Send a Telegram notification"""
     if not telegram_bot:
-        return
+        return False
     
     chat_id = get_setting('telegram_chat_id', '')
     if not chat_id:
-        return
+        return False
     
     try:
         telegram_bot.send_message(chat_id, message)
+        return True
     except Exception as e:
         print(f"Telegram send error: {e}")
+        return False
 
 # =============================================================================
 # Flask Routes - Pages
@@ -2459,20 +2811,37 @@ def api_users():
             conn.commit()
             user_id = cursor.lastrowid
             conn.close()
+            
+            # Log action
+            log_action('user_added', 'user', user_id, {'username': username_to_store, 'platform': platform})
+            
             return jsonify({'id': user_id, 'username': username_to_store, 'platform': platform})
         except sqlite3.IntegrityError:
             conn.close()
             return jsonify({'error': 'User already exists'}), 409
     
     # GET - list users
-    cursor.execute('''
-        SELECT u.*, GROUP_CONCAT(t.id || ':' || t.name || ':' || t.color) as tags
-        FROM users u
-        LEFT JOIN user_tags ut ON u.id = ut.user_id
-        LEFT JOIN tags t ON ut.tag_id = t.id
-        GROUP BY u.id
-        ORDER BY u.created_at DESC
-    ''')
+    include_archived = request.args.get('include_archived', 'false').lower() == 'true'
+    
+    if include_archived:
+        cursor.execute('''
+            SELECT u.*, GROUP_CONCAT(t.id || ':' || t.name || ':' || t.color) as tags
+            FROM users u
+            LEFT JOIN user_tags ut ON u.id = ut.user_id
+            LEFT JOIN tags t ON ut.tag_id = t.id
+            GROUP BY u.id
+            ORDER BY u.created_at DESC
+        ''')
+    else:
+        cursor.execute('''
+            SELECT u.*, GROUP_CONCAT(t.id || ':' || t.name || ':' || t.color) as tags
+            FROM users u
+            LEFT JOIN user_tags ut ON u.id = ut.user_id
+            LEFT JOIN tags t ON ut.tag_id = t.id
+            WHERE u.is_archived = 0 OR u.is_archived IS NULL
+            GROUP BY u.id
+            ORDER BY u.created_at DESC
+        ''')
     users = [dict(row) for row in cursor.fetchall()]
     conn.close()
     
@@ -2550,6 +2919,9 @@ def api_user(user_id):
             cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
             conn.commit()
             
+            # Log action
+            log_action('user_deleted', 'user', user_id, {'username': user['username'], 'platform': user['platform']})
+            
             # Optionally delete files
             if request.args.get('delete_files') == 'true':
                 user_dir = DOWNLOADS_DIR / user['platform'] / user['username']
@@ -2593,6 +2965,10 @@ def api_user_sync(user_id):
         return jsonify({'error': 'User not found'}), 404
     
     queue_id = add_to_queue(user['username'], user['platform'])
+    
+    # Send notification
+    send_notification(f"🔄 Started sync for @{user['username']} ({user['platform']})")
+    
     return jsonify({'queue_id': queue_id, 'message': 'Added to download queue'})
 
 @app.route('/api/sync-all', methods=['POST'])
@@ -2600,6 +2976,127 @@ def api_sync_all():
     """Sync all users"""
     count = sync_all_users()
     return jsonify({'message': f'Started sync for {count} users', 'count': count})
+
+# Archive API
+@app.route('/api/users/<int:user_id>/archive', methods=['POST'])
+def api_archive_user(user_id):
+    """Toggle archive status for a user"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT username, platform, is_archived FROM users WHERE id = ?', (user_id,))
+    user = cursor.fetchone()
+    
+    if not user:
+        conn.close()
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Toggle archive status
+    new_status = 0 if user['is_archived'] else 1
+    cursor.execute('UPDATE users SET is_archived = ? WHERE id = ?', (new_status, user_id))
+    conn.commit()
+    conn.close()
+    
+    # Log action
+    action = 'user_archived' if new_status else 'user_unarchived'
+    log_action(action, 'user', user_id, {'username': user['username'], 'platform': user['platform']})
+    
+    return jsonify({
+        'success': True, 
+        'is_archived': bool(new_status),
+        'message': 'Profile archived' if new_status else 'Profile unarchived'
+    })
+
+# Retry Download API
+@app.route('/api/queue/<int:queue_id>/retry', methods=['POST'])
+def api_queue_retry(queue_id):
+    """Manually retry a failed download"""
+    with queue_lock:
+        for job in download_queue:
+            if job['id'] == queue_id and job['status'] == 'failed':
+                # Re-queue the job
+                new_id = add_to_queue(
+                    job['username'], 
+                    job['platform'], 
+                    job.get('url'), 
+                    job.get('folder'),
+                    job.get('password'),
+                    0  # Reset retry count
+                )
+                log_action('download_manual_retry', 'download', queue_id, {
+                    'username': job['username'], 'new_queue_id': new_id
+                })
+                return jsonify({'success': True, 'new_queue_id': new_id})
+        
+    return jsonify({'error': 'Job not found or not failed'}), 404
+
+# Audit Log API
+@app.route('/api/audit-log', methods=['GET', 'DELETE'])
+@login_required
+def api_audit_log():
+    """Get or clear audit log"""
+    if request.method == 'DELETE':
+        days = int(request.args.get('days', 30))
+        deleted = clear_audit_logs(days)
+        return jsonify({'success': True, 'deleted': deleted})
+    
+    # GET
+    limit = int(request.args.get('limit', 100))
+    offset = int(request.args.get('offset', 0))
+    logs = get_audit_logs(limit, offset)
+    return jsonify(logs)
+
+@app.route('/api/audit-log/export', methods=['GET'])
+@login_required
+def api_audit_log_export():
+    """Export audit log as CSV"""
+    logs = get_audit_logs(limit=10000)
+    
+    # Build CSV
+    import io
+    import csv
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['ID', 'Action', 'Entity Type', 'Entity ID', 'Details', 'Created At'])
+    for log in logs:
+        writer.writerow([
+            log['id'], log['action'], log['entity_type'], 
+            log['entity_id'], log['details'], log['created_at']
+        ])
+    
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=audit_log.csv'}
+    )
+
+# Encryption Status API
+@app.route('/api/encryption-status', methods=['GET'])
+def api_encryption_status():
+    """Get encryption availability and status"""
+    return jsonify({
+        'available': ENCRYPTION_AVAILABLE,
+        'enabled': get_setting('encryption_enabled', 'false') == 'true'
+    })
+
+# Test Notification API
+@app.route('/api/test-notification', methods=['POST'])
+def api_test_notification():
+    """Send a test notification to all configured channels"""
+    telegram_sent = send_telegram_notification("🔔 Test notification from TrackUI!")
+    discord_sent = send_discord_notification("🔔 Test notification from TrackUI!")
+    
+    if telegram_sent or discord_sent:
+        channels = []
+        if telegram_sent:
+            channels.append("Telegram")
+        if discord_sent:
+            channels.append("Discord")
+        return jsonify({'success': True, 'message': f'Test sent to: {", ".join(channels)}'})
+    else:
+        return jsonify({'error': 'No notification channels configured or both failed'}), 400
+
 
 # Tags API
 @app.route('/api/tags', methods=['GET', 'POST'])

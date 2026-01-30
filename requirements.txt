@@ -3,3 +3,4 @@ gallery-dl
 pyTelegramBotAPI
 yt-dlp
 yt-dlp-ejs
+cryptography

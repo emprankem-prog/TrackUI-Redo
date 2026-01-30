@@ -2158,3 +2158,98 @@ img {
 body.debug-mode .debug-only {
     display: inline-flex !important;
 }
+
+/* =============================================================================
+   Audit Log
+   ============================================================================= */
+
+.audit-log-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.audit-log-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius-md);
+    border-left: 3px solid var(--accent-primary);
+}
+
+.audit-log-item.action-user_added,
+.audit-log-item.action-download_completed {
+    border-left-color: var(--accent-success);
+}
+
+.audit-log-item.action-user_deleted,
+.audit-log-item.action-download_failed {
+    border-left-color: var(--accent-danger);
+}
+
+.audit-log-item.action-user_archived,
+.audit-log-item.action-download_retry {
+    border-left-color: var(--accent-warning);
+}
+
+.audit-log-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.audit-log-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.audit-log-action {
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    text-transform: capitalize;
+    margin-bottom: var(--space-xs);
+}
+
+.audit-log-details {
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    word-break: break-word;
+}
+
+.audit-log-time {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* =============================================================================
+   Archived Profiles
+   ============================================================================= */
+
+.user-card.archived {
+    opacity: 0.65;
+    filter: grayscale(30%);
+}
+
+.user-card.archived::after {
+    content: '📦 ARCHIVED';
+    position: absolute;
+    top: var(--space-sm);
+    right: var(--space-sm);
+    background: var(--accent-warning);
+    color: #000;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: var(--border-radius-sm);
+    letter-spacing: 0.5px;
+    z-index: 10;
+}
+
+.user-card.archived:hover {
+    opacity: 1;
+    filter: none;
+}

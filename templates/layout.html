@@ -575,17 +575,104 @@
                     </div>
                 </div>
 
-                <!-- Telegram Settings -->
+                <!-- Notifications Settings -->
                 <div class="settings-section">
-                    <h4 class="settings-section-title">📱 Telegram Notifications</h4>
-                    <div class="form-group">
-                        <label class="form-label" for="telegram-token">Bot Token</label>
-                        <input type="text" id="telegram-token" class="form-input" placeholder="123456789:ABC...">
+                    <h4 class="settings-section-title">🔔 Notifications</h4>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-label">Enable Notifications</div>
+                            <div class="settings-description">Send notifications when downloads complete</div>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="notifications-enabled" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label" for="telegram-chat-id">Chat ID</label>
-                        <input type="text" id="telegram-chat-id" class="form-input" placeholder="Your chat ID">
+
+                    <!-- Telegram -->
+                    <div
+                        style="margin-top: var(--space-lg); padding-top: var(--space-md); border-top: 1px solid var(--border-color);">
+                        <div class="settings-label" style="margin-bottom: var(--space-sm);">📱 Telegram Bot</div>
+                        <div class="form-group">
+                            <input type="text" id="telegram-token" class="form-input"
+                                placeholder="Bot Token (123456789:ABC...)">
+                        </div>
+                        <div class="form-group">
+                            <input type="text" id="telegram-chat-id" class="form-input" placeholder="Chat ID">
+                        </div>
                     </div>
+
+                    <!-- Discord -->
+                    <div
+                        style="margin-top: var(--space-md); padding-top: var(--space-md); border-top: 1px solid var(--border-color);">
+                        <div class="settings-label" style="margin-bottom: var(--space-sm);">💬 Discord Webhook</div>
+                        <div class="form-group">
+                            <input type="text" id="discord-webhook-url" class="form-input"
+                                placeholder="https://discord.com/api/webhooks/...">
+                            <p class="text-muted" style="font-size: 12px; margin-top: 4px;">
+                                Get this from Discord: Server Settings → Integrations → Webhooks
+                            </p>
+                        </div>
+                        <button class="btn btn-secondary" onclick="testNotification()"
+                            style="margin-top: var(--space-sm);">
+                            🔔 Test Notification
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Auto-Retry Settings -->
+                <div class="settings-section">
+                    <h4 class="settings-section-title">🔄 Auto-Retry Downloads</h4>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-label">Enable Auto-Retry</div>
+                            <div class="settings-description">Automatically retry failed downloads</div>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="retry-enabled" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row" style="margin-top: var(--space-md);">
+                        <div>
+                            <div class="settings-label">Max Retry Attempts</div>
+                        </div>
+                        <select id="retry-max-attempts" class="form-select" style="width: auto;">
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3" selected>3</option>
+                            <option value="5">5</option>
+                        </select>
+                    </div>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-label">Retry Delay</div>
+                        </div>
+                        <select id="retry-delay-seconds" class="form-select" style="width: auto;">
+                            <option value="10">10 seconds</option>
+                            <option value="30" selected>30 seconds</option>
+                            <option value="60">1 minute</option>
+                            <option value="120">2 minutes</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Encryption Settings -->
+                <div class="settings-section" id="encryption-section">
+                    <h4 class="settings-section-title">🔐 Encryption</h4>
+                    <div class="settings-row">
+                        <div>
+                            <div class="settings-label">Enable Encryption</div>
+                            <div class="settings-description">Encrypt sensitive settings (tokens, webhook URLs)</div>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="encryption-enabled">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <p class="text-muted" style="font-size: 12px; margin-top: var(--space-sm);" id="encryption-status">
+                        Checking encryption availability...
+                    </p>
                 </div>
 
                 <!-- Instagram Cookies -->
@@ -612,6 +699,24 @@
                     </div>
                     <div id="tiktok-cookies-list" class="cookie-list mt-md">
                         <p class="text-muted">Loading cookies...</p>
+                    </div>
+                </div>
+
+                <!-- Audit Log -->
+                <div class="settings-section">
+                    <h4 class="settings-section-title">📋 Audit Log</h4>
+                    <p class="text-muted mb-md">Track all actions performed in the app</p>
+                    <div class="flex gap-md">
+                        <button type="button" class="btn btn-secondary"
+                            onclick="openModal('audit-log-modal'); loadAuditLog();">
+                            📋 View Log
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="exportAuditLog()">
+                            📥 Export CSV
+                        </button>
+                        <button type="button" class="btn btn-danger" onclick="clearAuditLog()">
+                            🗑️ Clear Old
+                        </button>
                     </div>
                 </div>
 
@@ -643,6 +748,19 @@
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
+
+                    <!-- TikTok Engine Selector (Debug Only) -->
+                    <div class="settings-row debug-only" style="margin-top: var(--space-md);">
+                        <div>
+                            <div class="settings-label">TikTok Download Engine</div>
+                            <div class="settings-description">Choose which downloader to use for TikTok</div>
+                        </div>
+                        <select id="tiktok-engine" class="form-select" style="width: auto;">
+                            <option value="auto">Auto (yt-dlp)</option>
+                            <option value="yt-dlp">yt-dlp only</option>
+                            <option value="gallery-dl">gallery-dl only</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Danger Zone -->
@@ -664,6 +782,36 @@
                 <button type="submit" class="btn btn-primary">Save Settings</button>
             </div>
         </form>
+    </div>
+
+    <!-- Audit Log Modal -->
+    <div id="audit-log-modal" class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">📋 Audit Log</h3>
+            <button class="modal-close" onclick="closeModal('audit-log-modal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div class="flex gap-md mb-md" style="align-items: center;">
+                <input type="text" id="audit-log-search" class="form-input" placeholder="Search logs..."
+                    style="flex: 1;" oninput="filterAuditLog()">
+                <select id="audit-log-filter" class="form-select" style="width: auto;" onchange="filterAuditLog()">
+                    <option value="">All Actions</option>
+                    <option value="user_added">User Added</option>
+                    <option value="user_deleted">User Deleted</option>
+                    <option value="user_archived">Archived</option>
+                    <option value="download_completed">Download Completed</option>
+                    <option value="download_failed">Download Failed</option>
+                    <option value="download_retry">Download Retry</option>
+                </select>
+            </div>
+            <div id="audit-log-list" class="audit-log-list" style="max-height: 400px; overflow-y: auto;">
+                <p class="text-muted text-center">Loading...</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="loadMoreAuditLogs()">Load More</button>
+            <button type="button" class="btn btn-primary" onclick="closeModal('audit-log-modal')">Close</button>
+        </div>
     </div>
 
     <!-- Media Viewer Modal -->
@@ -860,10 +1008,22 @@
                 </div>
             </div>
 
-            <!-- Step 4: Telegram -->
+            <!-- Step 4: Notifications -->
             <div class="setup-content hidden" id="setup-step-4">
-                <h4>📱 Telegram Notifications</h4>
+                <h4>🔔 Notifications</h4>
                 <p class="text-muted mb-md">Get notifications about downloads (optional)</p>
+
+                <div class="settings-row" style="margin-bottom: var(--space-md);">
+                    <div>
+                        <div class="settings-label">Enable Notifications</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="setup-notifications-enabled" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <h5 style="margin-bottom: var(--space-sm); color: var(--text-secondary);">Telegram Bot</h5>
                 <div class="form-group">
                     <label class="form-label">Bot Token</label>
                     <input type="text" id="setup-telegram-token" class="form-input" placeholder="123456789:ABC...">
@@ -871,6 +1031,13 @@
                 <div class="form-group">
                     <label class="form-label">Chat ID</label>
                     <input type="text" id="setup-telegram-chat" class="form-input" placeholder="Your chat ID">
+                </div>
+
+                <h5 style="margin-bottom: var(--space-sm); color: var(--text-secondary);">Discord Webhook</h5>
+                <div class="form-group">
+                    <label class="form-label">Webhook URL</label>
+                    <input type="text" id="setup-discord-webhook" class="form-input"
+                        placeholder="https://discord.com/api/webhooks/...">
                 </div>
             </div>
 
