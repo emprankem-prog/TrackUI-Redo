@@ -387,17 +387,49 @@ def decrypt_data(encrypted_data):
 # =============================================================================
 
 def send_discord_notification(message, embed=None):
-    """Send a Discord webhook notification"""
+    """Send a Discord webhook notification with automatic embed formatting"""
     webhook_url = get_setting('discord_webhook_url', '')
     if not webhook_url:
         return False
     
-    # Clean message for Discord (remove markdown asterisks for bold)
-    clean_message = message.replace('*', '**')  # Convert to Discord bold
+    payload = {}
     
-    payload = {'content': clean_message}
     if embed:
         payload['embeds'] = [embed]
+        # If manually provided embed, we can also send content if needed, but usually not.
+        payload['content'] = message if message and not embed.get('description') else ''
+    else:
+        # Automatic embed generation based on message content
+        color = 0x808080  # Default grey
+        title = "Notification"
+        
+        # Determine style based on emoji
+        if '✅' in message:
+            color = 0x2ECC71  # Green
+            title = "Download Complete"
+        elif '❌' in message:
+            color = 0xE74C3C  # Red
+            title = "Download Failed"
+        elif '🔄' in message:
+            color = 0x3498DB  # Blue
+            title = "Sync Started"
+        elif '⏰' in message:
+            color = 0x9B59B6  # Purple
+            title = "Scheduler Triggered"
+        elif '🔔' in message:
+            color = 0xF1C40F  # Yellow
+            title = "Test Notification"
+            
+        # Clean message (remove markdown bold for display if needed, but Discord supports it)
+        # We keep the markdown for the description
+        
+        payload['embeds'] = [{
+            'title': title,
+            'description': message,
+            'color': color,
+            'footer': {'text': 'TrackUI'},
+            'timestamp': datetime.now().isoformat()
+        }]
     
     try:
         response = requests.post(webhook_url, json=payload, timeout=10)
@@ -412,11 +444,13 @@ def send_notification(message, embed=None):
     if not notifications_enabled:
         return
     
-    # Send to Telegram
+    # Send to Telegram (always text)
     send_telegram_notification(message)
     
-    # Send to Discord
+    # Send to Discord (smart embed)
     send_discord_notification(message, embed)
+
+
 
 # =============================================================================
 # Download Engine
@@ -861,7 +895,6 @@ def run_tiktok_download(job, output_dir, url, cookie_file, username):
             '--no-warnings',
             '--lazy-playlist',           # Don't fetch entire playlist metadata upfront
             '--break-on-existing',       # Stop when hitting archived video
-            '-f', 'best',                # Best quality
             '--ignore-errors',           # Continue on errors
         ])
         
