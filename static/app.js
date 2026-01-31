@@ -1159,6 +1159,8 @@ function populateSettingsForm() {
         retryDelaySeconds.value = state.settings.retry_delay_seconds || '30';
     }
 
+
+
     // Encryption settings
     const encryptionEnabled = document.getElementById('encryption-enabled');
     if (encryptionEnabled) {
