@@ -1179,7 +1179,7 @@ function populateSettingsForm() {
     // TikTok Engine (Debug Mode)
     const tiktokEngine = document.getElementById('tiktok-engine');
     if (tiktokEngine) {
-        tiktokEngine.value = state.settings.tiktok_engine || 'auto';
+        tiktokEngine.value = state.settings.tiktok_engine || 'gallery-dl';
     }
 
     // Auto-lock settings from localStorage
@@ -1241,7 +1241,7 @@ async function saveSettings(event) {
         encryption_enabled: document.getElementById('encryption-enabled')?.checked ? 'true' : 'false',
         // Downloads
         max_concurrent_downloads: document.getElementById('max-concurrent')?.value || '2',
-        tiktok_engine: document.getElementById('tiktok-engine')?.value || 'auto'
+        tiktok_engine: document.getElementById('tiktok-engine')?.value || 'gallery-dl'
     };
 
     try {

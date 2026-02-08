@@ -588,7 +588,8 @@ def run_download(job):
     
     elif platform == 'tiktok':
         # Check which engine to use from settings
-        tiktok_engine = get_setting('tiktok_engine', 'auto')
+        tiktok_engine = get_setting('tiktok_engine', 'gallery-dl')
+        print(f"🎵 TikTok Download: Engine={tiktok_engine}")
         cookie_file = user_cookie or get_default_tiktok_cookie()
         
         if job.get('url'):
@@ -599,10 +600,12 @@ def run_download(job):
         # Route based on engine setting
         if tiktok_engine == 'gallery-dl':
             # Use gallery-dl path (continue with gallery-dl command below)
+            print("Using gallery-dl for TikTok...")
             if cookie_file:
                 cmd.extend(['--cookies', cookie_file])
         else:
-            # Use yt-dlp (auto or explicit yt-dlp)
+            # Use yt-dlp (explicit yt-dlp)
+            print("Using yt-dlp for TikTok...")
             run_tiktok_download(job, output_dir, url, cookie_file, username)
             return
     
