@@ -528,7 +528,9 @@ async function syncUser(userId, username) {
 
         if (response.ok) {
             showToast(`Started sync for ${username}`, 'success');
-            openModal('sync-confirm-modal');
+            // Immediately refresh queue and open downloads modal
+            await updateQueue();
+            openModal('downloads-modal');
         } else {
             showToast(data.error || 'Failed to start sync', 'error');
         }
@@ -552,6 +554,8 @@ async function syncAllUsers() {
 
         if (response.ok) {
             showToast(data.message, 'success');
+            // Immediately refresh queue then open modal
+            await updateQueue();
             openModal('downloads-modal');
         } else {
             showToast(data.error || 'Failed to start sync', 'error');
@@ -2439,7 +2443,9 @@ async function syncGroup(groupId) {
 
         if (response.ok) {
             showToast(data.message, 'success');
-            openModal('sync-confirm-modal');
+            // Immediately refresh queue and open downloads modal
+            await updateQueue();
+            openModal('downloads-modal');
         } else {
             showToast(data.error || 'Failed to sync group', 'error');
         }
