@@ -2393,7 +2393,16 @@ function openGroupSelector(groupId, groupName, members) {
     document.getElementById('group-selector-title').textContent = groupName;
 
     const container = document.getElementById('group-members-list');
-    container.innerHTML = members.map(member => {
+
+    // Add "View All Combined" button at top
+    let html = `
+        <a href="/group/${groupId}" class="group-view-all-btn">
+            🎬 View All Combined
+        </a>
+        <div class="group-members-divider">Or select individual profile:</div>
+    `;
+
+    html += members.map(member => {
         const platformIcon = member.platform === 'instagram' ? '📸' : (member.platform === 'tiktok' ? '🎵' : '💖');
         const displayName = member.display_name || member.username;
 
@@ -2413,6 +2422,8 @@ function openGroupSelector(groupId, groupName, members) {
             </a>
         `;
     }).join('');
+
+    container.innerHTML = html;
 
     openModal('group-selector-modal');
 }

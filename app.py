@@ -2491,6 +2491,147 @@ def browse_files(subpath=''):
         parent_path=parent_path
     )
 
+@app.route('/group/<int:group_id>')
+@login_required
+def group_gallery(group_id):
+    """Combined group gallery - shows all member media in one view"""
+    import urllib.parse
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Get group info
+    cursor.execute('SELECT * FROM profile_groups WHERE id = ?', (group_id,))
+    group = cursor.fetchone()
+    
+    if not group:
+        return "Group not found", 404
+    
+    group = dict(group)
+    
+    # Get group members
+    cursor.execute('''
+        SELECT u.* FROM users u
+        JOIN group_members gm ON u.id = gm.user_id
+        WHERE gm.group_id = ?
+    ''', (group_id,))
+    members = [dict(row) for row in cursor.fetchall()]
+    
+    # Get avatar for group - use avatar_user_id or fall back to first member
+    avatar_url = None
+    if group.get('avatar_user_id'):
+        cursor.execute('SELECT username, platform, profile_picture FROM users WHERE id = ?', (group['avatar_user_id'],))
+        avatar_row = cursor.fetchone()
+        if avatar_row:
+            if avatar_row['profile_picture']:
+                avatar_url = avatar_row['profile_picture']
+            else:
+                # Try to get avatar using get_avatar_url
+                avatar_url = get_avatar_url(avatar_row['username'], avatar_row['platform'])
+    
+    # Fallback to first member with a profile picture or get one
+    if not avatar_url and members:
+        for member in members:
+            if member.get('profile_picture'):
+                avatar_url = member['profile_picture']
+                break
+            else:
+                # Try to get avatar for first member
+                avatar_url = get_avatar_url(member['username'], member['platform'])
+                if avatar_url:
+                    break
+    
+    group['avatar_url'] = avatar_url
+    conn.close()
+    
+    # Aggregate media from all members
+    media = {'posts': [], 'stories': [], 'highlights': {}}
+    total_stats = {'posts': 0, 'videos': 0, 'size_bytes': 0}
+    
+    for member in members:
+        platform = member['platform']
+        username = member['username']
+        media_dir = DOWNLOADS_DIR / platform / username
+        
+        if not media_dir.exists():
+            continue
+        
+        # Collect all media files
+        for root, dirs, files in os.walk(media_dir):
+            for f in files:
+                if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.mp4', '.webm', '.mov')):
+                    file_path = Path(root) / f
+                    rel_path = Path(root).relative_to(media_dir)
+                    
+                    # URL-encode the filename and path
+                    encoded_filename = urllib.parse.quote(f, safe='')
+                    raw_path = Path(root).relative_to(DOWNLOADS_DIR).as_posix()
+                    encoded_path = '/'.join(urllib.parse.quote(part, safe='') for part in raw_path.split('/'))
+                    
+                    try:
+                        stat = file_path.stat()
+                        modified = stat.st_mtime
+                        total_stats['size_bytes'] += stat.st_size
+                    except:
+                        modified = 0
+                    
+                    is_video = f.lower().endswith(('.mp4', '.webm', '.mov'))
+                    if is_video:
+                        total_stats['videos'] += 1
+                    else:
+                        total_stats['posts'] += 1
+                    
+                    file_info = {
+                        'filename': encoded_filename,
+                        'display_name': f,
+                        'path': encoded_path,
+                        'type': 'video' if is_video else 'image',
+                        'modified': modified,
+                        'owner': username,
+                        'owner_platform': platform,
+                        'owner_avatar': member.get('profile_picture', '')
+                    }
+                    
+                    # Categorize based on path
+                    path_str = str(rel_path).lower()
+                    if 'stories' in path_str:
+                        media['stories'].append(file_info)
+                    elif 'highlights' in path_str:
+                        parts = rel_path.parts
+                        if len(parts) >= 2:
+                            highlight_name = parts[1] if parts[0] == 'highlights' else parts[0]
+                        else:
+                            highlight_name = 'General'
+                        
+                        key = f"{username}/{highlight_name}"
+                        if key not in media['highlights']:
+                            media['highlights'][key] = []
+                        media['highlights'][key].append(file_info)
+                    else:
+                        media['posts'].append(file_info)
+    
+    # Sort by modified date
+    media['posts'].sort(key=lambda x: x['modified'], reverse=True)
+    media['stories'].sort(key=lambda x: x['modified'], reverse=True)
+    for key in media['highlights']:
+        media['highlights'][key].sort(key=lambda x: x['filename'])
+    
+    # Format size
+    size_bytes = total_stats['size_bytes']
+    if size_bytes >= 1024**3:
+        total_stats['size'] = f"{size_bytes / (1024**3):.1f} GB"
+    elif size_bytes >= 1024**2:
+        total_stats['size'] = f"{size_bytes / (1024**2):.1f} MB"
+    else:
+        total_stats['size'] = f"{size_bytes / 1024:.1f} KB"
+    
+    return render_template('group.html', 
+        group=group, 
+        members=members, 
+        media=media, 
+        stats=total_stats
+    )
+
 @app.route('/user/<platform>/<path:username>')
 @login_required
 def user_profile(platform, username):

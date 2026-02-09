@@ -2147,6 +2147,56 @@ img {
     color: var(--accent-primary);
 }
 
+/* View All Combined Button */
+.group-view-all-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    background: linear-gradient(135deg, #fe2c55 0%, #25f4ee 100%);
+    border: none;
+    border-radius: var(--border-radius-md);
+    color: white;
+    font-weight: 600;
+    font-size: var(--font-size-md);
+    text-decoration: none;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    box-shadow: 0 4px 15px rgba(254, 44, 85, 0.3);
+}
+
+.group-view-all-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(254, 44, 85, 0.4);
+}
+
+.group-members-divider {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+    padding: var(--space-md) 0;
+    position: relative;
+}
+
+.group-members-divider::before,
+.group-members-divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 30%;
+    height: 1px;
+    background: var(--border-color);
+}
+
+.group-members-divider::before {
+    left: 0;
+}
+
+.group-members-divider::after {
+    right: 0;
+}
+
 /* =============================================================================
    Debug Mode
    ============================================================================= */

@@ -1,0 +1,626 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ group.name }} - TrackUI{% endblock %}
+
+{% block content %}
+<!-- Group Header -->
+<div class="profile-header">
+    <!-- Avatar -->
+    {% set avatar = group.avatar_url or (members[0].profile_picture if members and members[0].profile_picture else none)
+    %}
+    {% if avatar %}
+    <img src="{{ avatar }}" alt="{{ group.name }}" class="profile-avatar">
+    {% else %}
+    <div class="profile-avatar">👥</div>
+    {% endif %}
+
+    <!-- Info -->
+    <div class="profile-info">
+        <h1 class="profile-name">{{ group.name }}</h1>
+        <p class="profile-username">
+            {{ members | length }} profiles
+            <span class="user-card-platform" style="margin-left: 8px;">👥 Group</span>
+        </p>
+
+        <!-- Member Avatars -->
+        <div class="group-member-avatars" style="display: flex; margin-top: 12px; gap: 4px;">
+            {% for member in members[:6] %}
+            <a href="/user/{{ member.platform }}/{{ member.username }}" class="member-mini-avatar"
+                title="@{{ member.username }}">
+                {% if member.profile_picture %}
+                <img src="{{ member.profile_picture }}" alt="{{ member.username }}">
+                {% else %}
+                <span>{% if member.platform == 'instagram' %}📸{% elif member.platform == 'tiktok' %}🎵{% else %}💖{%
+                    endif %}</span>
+                {% endif %}
+            </a>
+            {% endfor %}
+            {% if members | length > 6 %}
+            <div class="member-mini-avatar" style="background: var(--bg-tertiary);">
+                +{{ members | length - 6 }}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Stats -->
+        <div class="profile-stats" style="margin-top: 16px; justify-content: flex-start;">
+            <div class="profile-stat">
+                <div class="profile-stat-value">{{ stats.posts }}</div>
+                <div class="profile-stat-label">Posts</div>
+            </div>
+            <div class="profile-stat">
+                <div class="profile-stat-value">{{ stats.videos }}</div>
+                <div class="profile-stat-label">Videos</div>
+            </div>
+            <div class="profile-stat">
+                <div class="profile-stat-value">{{ stats.size }}</div>
+                <div class="profile-stat-label">Size</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="profile-actions">
+        <button class="btn btn-feed btn-lg" onclick="openFeedViewer(0)">
+            📱 Open Feed
+        </button>
+        <a href="/" class="btn btn-secondary">
+            ← Back to Dashboard
+        </a>
+    </div>
+</div>
+
+<!-- Media Type Filter -->
+<div class="media-filter">
+    <button class="filter-btn active" data-filter="all" onclick="filterMedia('all')">
+        🎯 All
+    </button>
+    <button class="filter-btn" data-filter="image" onclick="filterMedia('image')">
+        🖼️ Images
+    </button>
+    <button class="filter-btn" data-filter="video" onclick="filterMedia('video')">
+        🎬 Videos
+    </button>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+    <button class="tab active" data-tab="posts" onclick="switchTab('posts')">
+        📷 Posts ({{ media.posts | length }})
+    </button>
+    <button class="tab" data-tab="stories" onclick="switchTab('stories')">
+        ⏳ Stories ({{ media.stories | length }})
+    </button>
+</div>
+
+<!-- Posts Tab -->
+<div id="tab-posts" class="tab-content active">
+    {% if media.posts %}
+    <div class="media-grid-fixed">
+        {% for item in media.posts %}
+        <div class="media-item-fixed" data-type="{{ item.type }}"
+            onclick="openMediaViewer('/media/{{ item.path }}/{{ item.filename }}', '{{ item.type }}')">
+            {% if item.type == 'video' %}
+            <video src="/media/{{ item.path }}/{{ item.filename }}" preload="metadata" muted></video>
+            <div class="media-video-indicator">🎬</div>
+            {% else %}
+            <img src="/media/{{ item.path }}/{{ item.filename }}" alt="" loading="lazy">
+            {% endif %}
+            <!-- Owner Badge -->
+            <a href="/user/{{ item.owner_platform }}/{{ item.owner }}" class="media-owner-badge"
+                onclick="event.stopPropagation()">
+                @{{ item.owner.split('/')[1] if '/' in item.owner else item.owner }}
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">📷</div>
+        <h2 class="empty-state-title">No posts yet</h2>
+        <p class="empty-state-description">Sync the group members to download their posts.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Stories Tab -->
+<div id="tab-stories" class="tab-content">
+    {% if media.stories %}
+    <div class="media-grid-fixed">
+        {% for item in media.stories %}
+        <div class="media-item-fixed" data-type="{{ item.type }}"
+            onclick="openMediaViewer('/media/{{ item.path }}/{{ item.filename }}', '{{ item.type }}')">
+            {% if item.type == 'video' %}
+            <video src="/media/{{ item.path }}/{{ item.filename }}" preload="metadata" muted></video>
+            <div class="media-video-indicator">🎬</div>
+            {% else %}
+            <img src="/media/{{ item.path }}/{{ item.filename }}" alt="" loading="lazy">
+            {% endif %}
+            <!-- Owner Badge -->
+            <a href="/user/{{ item.owner_platform }}/{{ item.owner }}" class="media-owner-badge"
+                onclick="event.stopPropagation()">
+                @{{ item.owner.split('/')[1] if '/' in item.owner else item.owner }}
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">⏳</div>
+        <h2 class="empty-state-title">No stories yet</h2>
+        <p class="empty-state-description">Stories will appear here when downloaded.</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    // Media type filter
+    let currentFilter = 'all';
+
+    function filterMedia(type) {
+        currentFilter = type;
+
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.filter === type);
+        });
+
+        document.querySelectorAll('.media-item-fixed').forEach(item => {
+            const itemType = item.dataset.type;
+            if (type === 'all' || itemType === type) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+
+        // Update feed array
+        if (type === 'all') {
+            feedMedia = isShuffled ? shuffleArray(allMediaOriginal) : [...allMediaOriginal];
+        } else {
+            const filtered = allMediaOriginal.filter(item => item.type === type);
+            feedMedia = isShuffled ? shuffleArray(filtered) : filtered;
+        }
+    }
+
+    // Feed Viewer
+    const allMediaOriginal = [
+        {% for item in media.posts %}
+    { src: '/media/{{ item.path }}/{{ item.filename }}', type: '{{ item.type }}', owner: '{{ item.owner }}' },
+    {% endfor %}
+    ];
+
+    let feedMedia = [...allMediaOriginal];
+    let currentFeedIndex = 0;
+    let isMuted = true;
+    let isShuffled = false;
+
+    function shuffleArray(array) {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+    }
+
+    function toggleShuffle() {
+        isShuffled = !isShuffled;
+        const btn = document.getElementById('feed-shuffle-btn');
+        btn.classList.toggle('active', isShuffled);
+
+        if (isShuffled) {
+            feedMedia = shuffleArray(allMediaOriginal);
+            showToast('🔀 Shuffle ON', 'success');
+        } else {
+            feedMedia = [...allMediaOriginal];
+            showToast('📋 Original order', 'info');
+        }
+        rebuildFeed();
+    }
+
+    function rebuildFeed() {
+        const container = document.getElementById('feed-container');
+        container.innerHTML = feedMedia.map((item, index) => `
+            <div class="feed-item" data-index="${index}">
+                ${item.type === 'video'
+                ? `<video src="${item.src}" loop playsinline ${isMuted ? 'muted' : ''}></video>`
+                : `<img src="${item.src}" alt="">`
+            }
+                <div class="feed-counter">${index + 1} / ${feedMedia.length}</div>
+                <div class="feed-owner">@${item.owner}</div>
+            </div>
+        `).join('');
+
+        currentFeedIndex = 0;
+        scrollToFeedItem(0);
+        setupFeedObserver();
+    }
+
+    function openFeedViewer(startIndex = 0, shuffle = false) {
+        if (allMediaOriginal.length === 0) {
+            showToast('No media to display', 'error');
+            return;
+        }
+
+        if (shuffle) {
+            isShuffled = true;
+            feedMedia = shuffleArray(allMediaOriginal);
+            document.getElementById('feed-shuffle-btn').classList.add('active');
+        } else if (!isShuffled) {
+            feedMedia = [...allMediaOriginal];
+        }
+
+        currentFeedIndex = startIndex;
+        const viewer = document.getElementById('feed-viewer');
+        const container = document.getElementById('feed-container');
+
+        container.innerHTML = feedMedia.map((item, index) => `
+            <div class="feed-item" data-index="${index}">
+                ${item.type === 'video'
+                ? `<video src="${item.src}" loop playsinline ${isMuted ? 'muted' : ''}></video>`
+                : `<img src="${item.src}" alt="">`
+            }
+                <div class="feed-counter">${index + 1} / ${feedMedia.length}</div>
+                <div class="feed-owner">@${item.owner}</div>
+            </div>
+        `).join('');
+
+        viewer.classList.add('active');
+        document.body.style.overflow = 'hidden';
+
+        setTimeout(() => {
+            scrollToFeedItem(startIndex);
+        }, 50);
+
+        setupFeedObserver();
+    }
+
+    function closeFeedViewer() {
+        const viewer = document.getElementById('feed-viewer');
+        viewer.classList.remove('active');
+        document.body.style.overflow = '';
+
+        document.querySelectorAll('#feed-container video').forEach(v => {
+            v.pause();
+        });
+    }
+
+    function scrollToFeedItem(index) {
+        const container = document.getElementById('feed-container');
+        const items = container.querySelectorAll('.feed-item');
+        if (items[index]) {
+            items[index].scrollIntoView({ behavior: 'smooth', block: 'start' });
+            currentFeedIndex = index;
+        }
+    }
+
+    function toggleFeedMute() {
+        isMuted = !isMuted;
+        const muteBtn = document.getElementById('feed-mute-btn');
+        muteBtn.textContent = isMuted ? '🔇' : '🔊';
+
+        document.querySelectorAll('#feed-container video').forEach(v => {
+            v.muted = isMuted;
+        });
+    }
+
+    function setupFeedObserver() {
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                const video = entry.target.querySelector('video');
+                if (video) {
+                    if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+                        video.play().catch(() => { });
+                        currentFeedIndex = parseInt(entry.target.dataset.index);
+                    } else {
+                        video.pause();
+                    }
+                }
+            });
+        }, {
+            root: document.getElementById('feed-container'),
+            threshold: 0.5
+        });
+
+        document.querySelectorAll('.feed-item').forEach(item => {
+            observer.observe(item);
+        });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        const viewer = document.getElementById('feed-viewer');
+        if (!viewer.classList.contains('active')) return;
+
+        if (e.key === 'Escape') {
+            closeFeedViewer();
+        } else if (e.key === 'ArrowDown' || e.key === ' ') {
+            e.preventDefault();
+            if (currentFeedIndex < feedMedia.length - 1) {
+                scrollToFeedItem(currentFeedIndex + 1);
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (currentFeedIndex > 0) {
+                scrollToFeedItem(currentFeedIndex - 1);
+            }
+        } else if (e.key === 'm') {
+            toggleFeedMute();
+        }
+    });
+</script>
+
+<!-- Feed Viewer -->
+<div id="feed-viewer" class="feed-viewer">
+    <div class="feed-header">
+        <button class="feed-close-btn" onclick="closeFeedViewer()">✕</button>
+        <span class="feed-username">{{ group.name }}</span>
+        <div class="feed-header-actions">
+            <button id="feed-shuffle-btn" class="feed-action-btn" onclick="toggleShuffle()" title="Shuffle">🔀</button>
+            <button id="feed-mute-btn" class="feed-action-btn" onclick="toggleFeedMute()" title="Mute">🔇</button>
+        </div>
+    </div>
+    <div id="feed-container" class="feed-container"></div>
+    <div class="feed-nav">
+        <button class="feed-nav-btn"
+            onclick="if(currentFeedIndex > 0) scrollToFeedItem(currentFeedIndex - 1)">▲</button>
+        <button class="feed-nav-btn"
+            onclick="if(currentFeedIndex < feedMedia.length - 1) scrollToFeedItem(currentFeedIndex + 1)">▼</button>
+    </div>
+</div>
+
+<style>
+    /* Member Mini Avatars */
+    .member-mini-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-secondary);
+        border: 2px solid var(--bg-primary);
+        font-size: 12px;
+        text-decoration: none;
+        transition: transform 0.2s;
+    }
+
+    .member-mini-avatar:hover {
+        transform: scale(1.15);
+        z-index: 10;
+    }
+
+    .member-mini-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    /* Owner Badge on Media Items */
+    .media-owner-badge {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        text-decoration: none;
+        backdrop-filter: blur(4px);
+        transition: background 0.2s;
+        max-width: calc(100% - 16px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .media-owner-badge:hover {
+        background: var(--accent-primary);
+    }
+
+    /* Feed Owner Badge */
+    .feed-owner {
+        position: absolute;
+        bottom: 140px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        padding: 6px 14px;
+        border-radius: 16px;
+        font-size: 13px;
+        backdrop-filter: blur(10px);
+    }
+
+    /* Feed Viewer Styles (copied from user.html) */
+    .feed-viewer {
+        position: fixed;
+        inset: 0;
+        background: #000;
+        z-index: 2000;
+        display: none;
+        flex-direction: column;
+    }
+
+    .feed-viewer.active {
+        display: flex;
+    }
+
+    .feed-header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        z-index: 10;
+        background: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent);
+    }
+
+    .feed-header-actions {
+        display: flex;
+        gap: 12px;
+    }
+
+    .feed-close-btn,
+    .feed-action-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.15);
+        border: none;
+        color: white;
+        font-size: 20px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(10px);
+        transition: all 0.2s;
+    }
+
+    .feed-close-btn:hover,
+    .feed-action-btn:hover {
+        background: rgba(255, 255, 255, 0.25);
+    }
+
+    .feed-action-btn.active {
+        background: linear-gradient(135deg, #fe2c55 0%, #25f4ee 100%);
+        box-shadow: 0 0 15px rgba(254, 44, 85, 0.5);
+    }
+
+    .feed-username {
+        color: white;
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .feed-container {
+        flex: 1;
+        overflow-y: scroll;
+        scroll-snap-type: y mandatory;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .feed-container::-webkit-scrollbar {
+        display: none;
+    }
+
+    .feed-item {
+        height: 100vh;
+        width: 100%;
+        scroll-snap-align: start;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        background: #000;
+    }
+
+    .feed-item img,
+    .feed-item video {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .feed-counter {
+        position: absolute;
+        bottom: 100px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 14px;
+        backdrop-filter: blur(10px);
+    }
+
+    .feed-nav {
+        position: absolute;
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        z-index: 10;
+    }
+
+    .feed-nav-btn {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.15);
+        border: none;
+        color: white;
+        font-size: 20px;
+        cursor: pointer;
+        backdrop-filter: blur(10px);
+        transition: all 0.2s;
+    }
+
+    .feed-nav-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: scale(1.1);
+    }
+
+    .btn-feed {
+        background: linear-gradient(135deg, #fe2c55 0%, #25f4ee 100%);
+        color: white;
+        border: none;
+    }
+
+    .btn-feed:hover {
+        box-shadow: 0 0 20px rgba(254, 44, 85, 0.4);
+    }
+
+    /* Media Filter */
+    .media-filter {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+    }
+
+    .filter-btn {
+        padding: 8px 16px;
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .filter-btn:hover {
+        border-color: var(--accent-primary);
+        color: var(--text-primary);
+    }
+
+    .filter-btn.active {
+        background: var(--accent-primary);
+        border-color: var(--accent-primary);
+        color: white;
+    }
+
+    @media (max-width: 768px) {
+        .feed-nav {
+            display: none;
+        }
+
+        .feed-counter {
+            bottom: 80px;
+        }
+
+        .feed-owner {
+            bottom: 120px;
+        }
+    }
+</style>
+{% endblock %}
