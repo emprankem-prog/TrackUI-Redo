@@ -101,7 +101,8 @@
         <div class="media-item-fixed" data-type="{{ item.type }}"
             onclick="openMediaViewer('/media/{{ item.path }}/{{ item.filename }}', '{{ item.type }}')">
             {% if item.type == 'video' %}
-            <video src="/media/{{ item.path }}/{{ item.filename }}" preload="metadata" muted></video>
+            <video data-src="/media/{{ item.path }}/{{ item.filename }}" class="lazy-video" preload="none"
+                muted></video>
             <div class="media-video-indicator">🎬</div>
             {% else %}
             <img src="/media/{{ item.path }}/{{ item.filename }}" alt="" loading="lazy">
@@ -131,7 +132,8 @@
         <div class="media-item-fixed" data-type="{{ item.type }}"
             onclick="openMediaViewer('/media/{{ item.path }}/{{ item.filename }}', '{{ item.type }}')">
             {% if item.type == 'video' %}
-            <video src="/media/{{ item.path }}/{{ item.filename }}" preload="metadata" muted></video>
+            <video data-src="/media/{{ item.path }}/{{ item.filename }}" class="lazy-video" preload="none"
+                muted></video>
             <div class="media-video-indicator">🎬</div>
             {% else %}
             <img src="/media/{{ item.path }}/{{ item.filename }}" alt="" loading="lazy">

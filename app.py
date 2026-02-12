@@ -3146,13 +3146,60 @@ def api_user_sync(user_id):
     # Send notification
     send_notification(f"🔄 Started sync for @{user['username']} ({user['platform']})")
     
-    return jsonify({'queue_id': queue_id, 'message': 'Added to download queue'})
+    # Return queue data immediately so frontend doesn't need separate fetch
+    with queue_lock:
+        queue_data = [{
+            'id': job['id'],
+            'username': job['username'],
+            'platform': job['platform'],
+            'status': job['status'],
+            'progress': job['progress'],
+            'message': job['message'],
+            'files_downloaded': job.get('files_downloaded', 0),
+            'started_at': job['started_at'],
+            'completed_at': job['completed_at']
+        } for job in download_queue]
+    
+    return jsonify({'queue_id': queue_id, 'message': 'Added to download queue', 'queue': queue_data})
+
+def sync_all_users():
+    """Queue sync for all non-archived users"""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('SELECT username, platform FROM users WHERE is_archived = 0 OR is_archived IS NULL')
+    users = cursor.fetchall()
+    conn.close()
+    
+    count = 0
+    for user in users:
+        add_to_queue(user['username'], user['platform'])
+        count += 1
+    
+    if count > 0:
+        send_notification(f"🔄 Started sync for {count} users")
+    
+    return count
 
 @app.route('/api/sync-all', methods=['POST'])
 def api_sync_all():
     """Sync all users"""
     count = sync_all_users()
-    return jsonify({'message': f'Started sync for {count} users', 'count': count})
+    
+    # Return queue data immediately
+    with queue_lock:
+        queue_data = [{
+            'id': job['id'],
+            'username': job['username'],
+            'platform': job['platform'],
+            'status': job['status'],
+            'progress': job['progress'],
+            'message': job['message'],
+            'files_downloaded': job.get('files_downloaded', 0),
+            'started_at': job['started_at'],
+            'completed_at': job['completed_at']
+        } for job in download_queue]
+    
+    return jsonify({'message': f'Started sync for {count} users', 'count': count, 'queue': queue_data})
 
 # Archive API
 @app.route('/api/users/<int:user_id>/archive', methods=['POST'])
@@ -3536,7 +3583,21 @@ def api_group_sync(group_id):
     for member in members:
         add_to_queue(member['username'], member['platform'])
     
-    return jsonify({'message': f'Added {len(members)} users to download queue'})
+    # Return queue data immediately
+    with queue_lock:
+        queue_data = [{
+            'id': job['id'],
+            'username': job['username'],
+            'platform': job['platform'],
+            'status': job['status'],
+            'progress': job['progress'],
+            'message': job['message'],
+            'files_downloaded': job.get('files_downloaded', 0),
+            'started_at': job['started_at'],
+            'completed_at': job['completed_at']
+        } for job in download_queue]
+    
+    return jsonify({'message': f'Added {len(members)} users to download queue', 'queue': queue_data})
 
 @app.route('/api/groups/<int:group_id>/tags', methods=['POST', 'DELETE'])
 def api_group_tags(group_id):

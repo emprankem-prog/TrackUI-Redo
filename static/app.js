@@ -383,6 +383,14 @@ function openModal(modalId) {
         if (modalId === 'settings-modal') {
             loadAllCookies();
         }
+
+        // Immediately refresh queue when downloads modal opens
+        if (modalId === 'downloads-modal') {
+            updateQueue();
+            // Also poll more frequently while modal is open
+            if (state.fastPollingInterval) clearInterval(state.fastPollingInterval);
+            state.fastPollingInterval = setInterval(updateQueue, 500);
+        }
     }
 }
 
@@ -397,6 +405,12 @@ function closeModal(modalId) {
             media.currentTime = 0;
         });
         modal.classList.remove('active');
+
+        // Stop fast polling when downloads modal closes
+        if (modalId === 'downloads-modal' && state.fastPollingInterval) {
+            clearInterval(state.fastPollingInterval);
+            state.fastPollingInterval = null;
+        }
     }
 
     // Check if any modals are still open
@@ -528,8 +542,12 @@ async function syncUser(userId, username) {
 
         if (response.ok) {
             showToast(`Started sync for ${username}`, 'success');
-            // Immediately refresh queue and open downloads modal
-            await updateQueue();
+            // Use queue data directly from response - no race condition!
+            if (data.queue) {
+                state.queue = data.queue;
+                renderQueue();
+                updateFloatingButton();
+            }
             openModal('downloads-modal');
         } else {
             showToast(data.error || 'Failed to start sync', 'error');
@@ -554,8 +572,12 @@ async function syncAllUsers() {
 
         if (response.ok) {
             showToast(data.message, 'success');
-            // Immediately refresh queue then open modal
-            await updateQueue();
+            // Use queue data directly from response - no race condition!
+            if (data.queue) {
+                state.queue = data.queue;
+                renderQueue();
+                updateFloatingButton();
+            }
             openModal('downloads-modal');
         } else {
             showToast(data.error || 'Failed to start sync', 'error');
@@ -824,8 +846,8 @@ async function randomUser() {
 // =============================================================================
 
 function initQueuePolling() {
-    // Poll queue status every 2 seconds
-    state.pollingInterval = setInterval(updateQueue, 2000);
+    // Poll queue status every 1 second for better updates
+    state.pollingInterval = setInterval(updateQueue, 1000);
     updateQueue();
 }
 
@@ -2443,8 +2465,12 @@ async function syncGroup(groupId) {
 
         if (response.ok) {
             showToast(data.message, 'success');
-            // Immediately refresh queue and open downloads modal
-            await updateQueue();
+            // Use queue data directly from response - no race condition!
+            if (data.queue) {
+                state.queue = data.queue;
+                renderQueue();
+                updateFloatingButton();
+            }
             openModal('downloads-modal');
         } else {
             showToast(data.error || 'Failed to sync group', 'error');
@@ -2797,7 +2823,54 @@ async function testNotification() {
         } else {
             showToast(data.error || 'Failed to send notification', 'error');
         }
-    } catch (error) {
-        showToast('Network error', 'error');
     }
 }
+
+// =============================================================================
+// Lazy Load Videos
+// =============================================================================
+
+function initLazyVideos() {
+    const lazyVideos = [].slice.call(document.querySelectorAll("video.lazy-video"));
+
+    if ("IntersectionObserver" in window) {
+        const videoObserver = new IntersectionObserver(function (entries, observer) {
+            entries.forEach(function (video) {
+                if (video.isIntersecting) {
+                    const videoElement = video.target;
+
+                    // Move data-src to src if dealing with lazy loading
+                    if (videoElement.dataset.src) {
+                        videoElement.src = videoElement.dataset.src;
+                        videoElement.preload = "metadata";
+                        videoElement.load();
+                        videoElement.classList.remove("lazy-video");
+                        videoObserver.unobserve(videoElement);
+                    } else if (videoElement.preload === "none") {
+                        // Standard video that just needs preload bump
+                        videoElement.preload = "metadata";
+                    }
+                }
+            });
+        }, {
+            rootMargin: "200px 0px" // Start loading 200px before viewport
+        });
+
+        lazyVideos.forEach(function (video) {
+            videoObserver.observe(video);
+        });
+    } else {
+        // Fallback
+        lazyVideos.forEach(function (video) {
+            if (video.dataset.src) {
+                video.src = video.dataset.src;
+                video.preload = "metadata";
+            }
+        });
+    }
+}
+
+// Initialize on load and when tabs change or filters update
+document.addEventListener("DOMContentLoaded", initLazyVideos);
+// Re-run when filter changes (exposed globally)
+window.initLazyVideos = initLazyVideos;
