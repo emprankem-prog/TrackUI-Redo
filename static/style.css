@@ -2379,6 +2379,12 @@ body.debug-mode .debug-only {
 }
 
 @keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.group-members-divider {
     width: 30%;
     height: 1px;
     background: var(--border-color);
@@ -2623,7 +2629,6 @@ body.debug-mode .debug-only {
 
 .queue-item:hover {
     border-color: var(--accent-primary);
-    transform: translateY(-1px);
     box-shadow: var(--shadow-sm);
 }
 
