@@ -2823,6 +2823,8 @@ async function testNotification() {
         } else {
             showToast(data.error || 'Failed to send notification', 'error');
         }
+    } catch (error) {
+        showToast('Network error', 'error');
     }
 }
 
