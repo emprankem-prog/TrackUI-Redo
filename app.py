@@ -2667,34 +2667,49 @@ def user_profile(platform, username):
     conn.close()
     
     # Get media files
+    media = get_cached_user_media(platform, username)
+
+@lru_cache(maxsize=100)
+def get_cached_user_media(platform, username):
+    """
+    Scans the user's download directory for media files.
+    Cached to improve performance on repeated visits.
+    """
     media_dir = DOWNLOADS_DIR / platform / username
     media = {'posts': [], 'stories': [], 'highlights': {}}
     
-    if media_dir.exists():
-        import urllib.parse
+    if not media_dir.exists():
+        return media
         
-        # Collect all media files first (faster than os.walk with stat on each)
-        all_files = []
-        for root, dirs, files in os.walk(media_dir):
-            for f in files:
-                if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.mp4', '.webm', '.mov')):
-                    all_files.append((root, f))
+    import urllib.parse
+    
+    # Use os.scandir for better performance (it yields DirEntry objects with stat info)
+    for root, dirs, files in os.walk(media_dir):
+        # Filter relevant files first
+        media_files = [f for f in files if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.mp4', '.webm', '.mov'))]
         
-        # Process files (limit stat calls for performance)
-        for root, f in all_files:
-            file_path = Path(root) / f
-            rel_path = Path(root).relative_to(media_dir)
+        if not media_files:
+            continue
             
-            # URL-encode the filename and path
-            encoded_filename = urllib.parse.quote(f, safe='')
-            raw_path = Path(root).relative_to(DOWNLOADS_DIR).as_posix()
-            encoded_path = '/'.join(urllib.parse.quote(part, safe='') for part in raw_path.split('/'))
-            
-            # Get modified time (single stat call, skip size for performance)
+        for f in media_files:
             try:
-                modified = file_path.stat().st_mtime
-            except:
+                # Use os.stat on the full path
+                full_path = Path(root) / f
+                stat_result = full_path.stat()
+                modified = stat_result.st_mtime
+            except Exception:
                 modified = 0
+            
+            # Helper to calculate relative paths safely
+            try:
+                rel_path = Path(root).relative_to(media_dir)
+                raw_path = Path(root).relative_to(DOWNLOADS_DIR).as_posix()
+            except ValueError:
+                continue
+
+            # URL-encode
+            encoded_filename = urllib.parse.quote(f, safe='')
+            encoded_path = '/'.join(urllib.parse.quote(part, safe='') for part in raw_path.split('/'))
             
             file_info = {
                 'filename': encoded_filename,
@@ -2704,7 +2719,7 @@ def user_profile(platform, username):
                 'modified': modified
             }
             
-            # Categorize based on path
+            # Categorize
             path_str = str(rel_path).lower()
             if 'stories' in path_str:
                 media['stories'].append(file_info)
@@ -2720,12 +2735,14 @@ def user_profile(platform, username):
                 media['highlights'][highlight_name].append(file_info)
             else:
                 media['posts'].append(file_info)
+
+    # Sort contents
+    media['posts'].sort(key=lambda x: x['modified'], reverse=True)
+    media['stories'].sort(key=lambda x: x['modified'], reverse=True)
+    for key in media['highlights']:
+        media['highlights'][key].sort(key=lambda x: x['filename'])
         
-        # Sort by modified date
-        media['posts'].sort(key=lambda x: x['modified'], reverse=True)
-        media['stories'].sort(key=lambda x: x['modified'], reverse=True)
-        for key in media['highlights']:
-            media['highlights'][key].sort(key=lambda x: x['filename'])
+    return media
     
     # Auto-detect profile picture if not set  
     if not user.get('profile_picture'):
