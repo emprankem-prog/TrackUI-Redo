@@ -2742,9 +2742,25 @@ def user_profile(platform, username):
     conn.close()
     
     # Get media files
-    media = get_cached_user_media(platform, username)
-
-
+    all_media = get_cached_user_media(platform, username)
+    
+    # Pagination Logic
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 60, type=int)
+    
+    # Slice posts for pagination
+    start = (page - 1) * limit
+    end = start + limit
+    
+    # Create paginated media object
+    media = {
+        'posts': all_media['posts'][start:end],
+        'stories': all_media['stories'],  # Stories usually few, show all
+        'highlights': all_media['highlights'], # Highlights usually few, show all
+        'total_posts': len(all_media['posts']),
+        'has_more': end < len(all_media['posts']),
+        'next_page': page + 1 if end < len(all_media['posts']) else None
+    }
     
     # Auto-detect profile picture if not set  
     if not user.get('profile_picture'):
@@ -2753,8 +2769,8 @@ def user_profile(platform, username):
         if avatar_url:
             user['profile_picture'] = avatar_url
         # Fallback: use first post image as profile picture
-        elif media['posts']:
-            first_image = next((p for p in media['posts'] if p['type'] == 'image'), None)
+        elif all_media['posts']:
+            first_image = next((p for p in all_media['posts'] if p['type'] == 'image'), None)
             if first_image:
                 user['profile_picture'] = f'/media/{first_image["path"]}/{first_image["filename"]}'
     
@@ -2765,6 +2781,26 @@ def user_profile(platform, username):
         display_username = username
     
     return render_template('user.html', user=user, media=media, platform=platform, username=username, display_username=display_username)
+
+@app.route('/api/user/<platform>/<path:username>/media')
+@login_required
+def api_user_media(platform, username):
+    """API endpoint for paginated media"""
+    page = request.args.get('page', 1, type=int)
+    limit = request.args.get('limit', 60, type=int)
+    
+    all_media = get_cached_user_media(platform, username)
+    
+    start = (page - 1) * limit
+    end = start + limit
+    
+    posts = all_media['posts'][start:end]
+    
+    return jsonify({
+        'posts': posts,
+        'has_more': end < len(all_media['posts']),
+        'next_page': page + 1
+    })
 
 @app.route('/api/users/random')
 @login_required

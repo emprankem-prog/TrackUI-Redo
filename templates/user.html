@@ -105,6 +105,17 @@
         </div>
         {% endfor %}
     </div>
+
+    {% if media.has_more %}
+    <div class="load-more-container">
+        <button id="load-more-btn" class="btn btn-secondary" data-platform="{{ platform }}"
+            data-username="{{ username }}" data-page="{{ media.next_page }}" onclick="loadMoreMedia(this)">
+            Load More ({{ media.total_posts - 60 }})
+        </button>
+        <div id="load-more-spinner" class="spinner hidden"></div>
+    </div>
+    {% endif %}
+
     {% else %}
     <div class="empty-state">
         <div class="empty-state-icon">📷</div>
@@ -181,13 +192,13 @@
     // =========================================================================
 
     // All media items for feed (original order)
-    const allMediaOriginal = [
+    window.allMediaOriginal = [
         {% for item in media.posts %}
     { src: '/media/{{ item.path }}/{{ item.filename }}', type: '{{ item.type }}' },
     {% endfor %}
     ];
 
-    let feedMedia = [...allMediaOriginal];
+    window.feedMedia = [...window.allMediaOriginal];
     let currentFeedIndex = 0;
     let isMuted = true;
     let isShuffled = false;

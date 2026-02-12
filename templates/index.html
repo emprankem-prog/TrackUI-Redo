@@ -99,11 +99,9 @@
         <div class="user-card-actions">
             <!-- Main Buttons Row -->
             <div class="user-card-actions-main">
-                <button class="btn btn-secondary" data-group-id="{{ group.id }}" data-group-name="{{ group.name }}"
-                    data-group-members='{{ group.members | tojson }}'
-                    onclick="event.stopPropagation(); openGroupSelectorFromButton(this)">
+                <a href="/group/{{ group.id }}" class="btn btn-secondary" onclick="event.stopPropagation()">
                     👁️ View
-                </button>
+                </a>
                 <button class="btn btn-primary" onclick="event.stopPropagation(); syncGroup({{ group.id }})">
                     🔄 Sync All
                 </button>

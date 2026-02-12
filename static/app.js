@@ -2875,4 +2875,88 @@ function initLazyVideos() {
 // Initialize on load and when tabs change or filters update
 document.addEventListener("DOMContentLoaded", initLazyVideos);
 // Re-run when filter changes (exposed globally)
-window.initLazyVideos = initLazyVideos;
+// =============================================================================
+// Pagination / Load More
+// =============================================================================
+
+async function loadMoreMedia(btn) {
+    if (!btn) return;
+
+    const platform = btn.dataset.platform;
+    const username = btn.dataset.username;
+    const page = parseInt(btn.dataset.page) || 2;
+    const spinner = document.getElementById('load-more-spinner');
+
+    // UI State: Loading
+    btn.classList.add('hidden');
+    spinner.classList.remove('hidden');
+
+    try {
+        const response = await fetch(`/api/user/${platform}/${username}/media?page=${page}&limit=60`);
+        const data = await response.json();
+
+        if (!response.ok) throw new Error(data.error || 'Failed to load media');
+
+        const grid = document.querySelector('.media-grid-fixed');
+
+        if (data.posts && data.posts.length > 0) {
+            const fragment = document.createDocumentFragment();
+
+            data.posts.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'media-item-fixed';
+                div.onclick = () => openMediaViewer(`/media/${item.path}/${item.filename}`, item.type);
+
+                if (item.type === 'video') {
+                    div.innerHTML = `
+                        <video data-src="/media/${item.path}/${item.filename}" class="lazy-video" preload="none" muted></video>
+                        <div class="media-video-indicator">🎬</div>
+                    `;
+                } else {
+                    div.innerHTML = `
+                        <img src="/media/${item.path}/${item.filename}" alt="" loading="lazy">
+                    `;
+                }
+
+                fragment.appendChild(div);
+            });
+
+            grid.appendChild(fragment);
+
+            // Update global media arrays for Feed Viewer
+            if (window.allMediaOriginal) {
+                const newItems = data.posts.map(item => ({
+                    src: `/media/${item.path}/${item.filename}`,
+                    type: item.type
+                }));
+
+                window.allMediaOriginal.push(...newItems);
+
+                // If current filter is 'all', update feedMedia too
+                if (window.feedMedia && (typeof currentFilter === 'undefined' || currentFilter === 'all')) {
+                    window.feedMedia.push(...newItems);
+                }
+            }
+
+            // Re-init lazy loading for new items
+            initLazyVideos();
+        }
+
+        if (data.has_more) {
+            btn.dataset.page = data.next_page;
+            // Calculate remaining roughly if we started with total - 60. 
+            // Ideally backend would return total_remaining, but we can just say "Load More"
+            btn.textContent = `Load More`;
+            btn.classList.remove('hidden');
+        } else {
+            btn.remove(); // Remove button if no more items
+        }
+
+    } catch (error) {
+        console.error('Error loading media:', error);
+        showToast('Failed to load more items', 'error');
+        btn.classList.remove('hidden');
+    } finally {
+        spinner.classList.add('hidden');
+    }
+}
