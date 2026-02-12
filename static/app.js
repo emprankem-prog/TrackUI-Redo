@@ -957,12 +957,14 @@ function getActionButtons(job) {
     }
 }
 
-// Track open log windows
+// Track open log windows and cached logs
 const openLogs = new Set();
+const jobLogs = new Map();
 
 function toggleLogs(id) {
     if (openLogs.has(id)) {
         openLogs.delete(id);
+        // Optional: clear cache or keep it? Keeping it is fine.
     } else {
         openLogs.add(id);
         fetchLogs(id);
@@ -977,11 +979,21 @@ async function fetchLogs(id) {
         const response = await fetch(`/api/queue/${id}/logs`);
         const data = await response.json();
 
+        // Cache logs
+        jobLogs.set(id, data.logs);
+
+        // Update DOM if it exists (for smooth real-time updates)
         const logContainer = document.getElementById(`logs-${id}`);
         if (logContainer) {
+            const wasAtBottom = logContainer.scrollHeight - logContainer.scrollTop === logContainer.clientHeight;
+
             logContainer.innerHTML = data.logs.map(line => `<div>${escapeHtml(line)}</div>`).join('');
-            // Auto scroll to bottom
-            logContainer.scrollTop = logContainer.scrollHeight;
+
+            // Auto scroll if was at bottom or is new
+            if (wasAtBottom || !logContainer.hasAttribute('data-initialized')) {
+                logContainer.scrollTop = logContainer.scrollHeight;
+                logContainer.setAttribute('data-initialized', 'true');
+            }
         }
 
         // Keep polling if logs are open and job is active
@@ -1004,6 +1016,12 @@ function renderQueueItem(job) {
     let progressPercent = job.progress || 0;
     let isIndeterminate = job.status === 'active' && progressPercent === 0;
     let isLogsOpen = openLogs.has(job.id);
+
+    // Get cached logs if available
+    const currentLogs = jobLogs.get(job.id);
+    const logsHtml = currentLogs
+        ? currentLogs.map(line => `<div>${escapeHtml(line)}</div>`).join('')
+        : '<div class="loading-logs">Loading logs...</div>';
 
     return `
         <div class="queue-item status-${job.status}" data-id="${job.id}">
@@ -1042,8 +1060,8 @@ function renderQueueItem(job) {
                         <span>Terminal Output</span>
                         <button class="btn-xs" onclick="toggleLogs(${job.id})">Close</button>
                     </div>
-                    <div class="queue-logs-terminal" id="logs-${job.id}">
-                        <div class="loading-logs">Loading logs...</div>
+                    <div class="queue-logs-terminal" id="logs-${job.id}" ${currentLogs ? 'data-initialized="true"' : ''}>
+                        ${logsHtml}
                     </div>
                 </div>
             ` : ''}
