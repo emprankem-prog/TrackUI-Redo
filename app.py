@@ -14,7 +14,7 @@ import zipfile
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
-from functools import wraps
+from functools import wraps, lru_cache
 from io import BytesIO
 
 from flask import (
