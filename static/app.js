@@ -890,32 +890,145 @@ function renderQueue() {
         return a.id - b.id;
     });
 
-    let html = `
-        <div class="queue-controls-global">
-            <div class="global-actions-left">
-                <button class="btn btn-sm btn-warning" onclick="controlGlobal('pause-all')">
-                    ⏸ Pause All
-                </button>
-                <button class="btn btn-sm btn-success" onclick="controlGlobal('resume-all')">
-                    ▶ Resume All
-                </button>
+    // Initial setup of container structure if needed
+    if (!container.querySelector('.queue-controls-global')) {
+        container.innerHTML = `
+            <div class="queue-controls-global">
+                <div class="global-actions-left">
+                    <button class="btn btn-sm btn-secondary" onclick="controlGlobal('pause-all')">
+                        ⏸ Pause All
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="controlGlobal('resume-all')">
+                        ▶ Resume All
+                    </button>
+                </div>
+                <div class="global-actions-right">
+                    <button class="btn btn-sm btn-danger" onclick="controlGlobal('stop-all')">
+                        ⏹ Stop All
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="controlGlobal('clear-completed')">
+                        🧹 Clear Done
+                    </button>
+                </div>
             </div>
-            <div class="global-actions-right">
-                <button class="btn btn-sm btn-danger" onclick="controlGlobal('stop-all')">
-                    ⏹ Stop All
-                </button>
-                <button class="btn btn-sm btn-secondary" onclick="controlGlobal('clear-completed')">
-                    🧹 Clear Done
-                </button>
+            <div class="queue-items-container"></div>
+        `;
+    }
+
+    const itemsContainer = container.querySelector('.queue-items-container');
+    const existingItems = new Map();
+    itemsContainer.querySelectorAll('.queue-item').forEach(el => {
+        existingItems.set(parseInt(el.dataset.id), el);
+    });
+
+    // Create a set of current job IDs for cleanup
+    const currentJobIds = new Set();
+
+    sortedQueue.forEach(job => {
+        currentJobIds.add(job.id);
+        let itemEl = existingItems.get(job.id);
+
+        if (itemEl) {
+            // Update existing item
+            updateQueueItemElement(itemEl, job);
+        } else {
+            // Create new item
+            const div = document.createElement('div');
+            div.innerHTML = renderQueueItem(job);
+            // The renderQueueItem returns the full HTML string for the item
+            // We need to extract the first child since renderQueueItem returns the .queue-item div
+            const newItem = div.firstElementChild;
+            itemsContainer.appendChild(newItem);
+        }
+    });
+
+    // Remove items that are no longer in the queue
+    existingItems.forEach((el, id) => {
+        if (!currentJobIds.has(id)) {
+            el.remove();
+        }
+    });
+}
+
+function updateQueueItemElement(el, job) {
+    // Update basic attributes and classes
+    if (!el.classList.contains(`status-${job.status}`)) {
+        el.className = `queue-item status-${job.status}`;
+    }
+
+    // Update status badge
+    const badge = el.querySelector('.status-badge');
+    if (badge && badge.textContent !== job.status.toUpperCase()) {
+        badge.className = `status-badge status-${job.status}`;
+        badge.textContent = job.status.toUpperCase();
+    }
+
+    // Update Meta (Time / Files)
+    const timeEl = el.querySelector('.time');
+    if (timeEl) timeEl.textContent = new Date(job.started_at || Date.now()).toLocaleTimeString();
+
+    // Update files count if changed (check if spans exist first)
+    // For simplicity, we can just re-render the meta section if counts change significantly
+    // But typically just updating the files count text is enough if we can target it.
+    // Let's use a simpler approach: update the whole .queue-meta content
+    const metaEl = el.querySelector('.queue-meta');
+    if (metaEl) {
+        const filesHtml = job.files_downloaded > 0 ? `<span class="files-count">📦 ${job.files_downloaded} files</span>` : '';
+        const timeHtml = `<span class="time">${new Date(job.started_at || Date.now()).toLocaleTimeString()}</span>`;
+        if (metaEl.innerHTML !== timeHtml + filesHtml) {
+            metaEl.innerHTML = timeHtml + filesHtml;
+        }
+    }
+
+    // Update Progress Bar
+    const progressContainer = el.querySelector('.queue-progress-bar');
+    if (progressContainer) {
+        let progressPercent = job.progress || 0;
+        let isIndeterminate = job.status === 'active' && progressPercent === 0;
+
+        // Update class list for indeterminate/status
+        progressContainer.className = `queue-progress-bar ${isIndeterminate ? 'progress-indeterminate' : ''} ${job.status}`;
+        progressContainer.style.width = isIndeterminate ? '100%' : Math.max(progressPercent, 5) + '%';
+    }
+
+    // Update Message
+    const msgEl = el.querySelector('.queue-message');
+    if (msgEl && msgEl.textContent !== job.message) {
+        msgEl.textContent = job.message;
+        msgEl.title = job.message;
+    }
+
+    // Update Buttons (Status change usually requires button change)
+    const actionsEl = el.querySelector('.queue-actions');
+    // We can just re-render buttons. It's cheap.
+    if (actionsEl) {
+        actionsEl.innerHTML = getActionButtons(job);
+    }
+
+    // Handle Logs Container Toggle
+    const isLogsOpen = openLogs.has(job.id);
+    const logsContainer = el.querySelector('.queue-logs-container');
+
+    if (isLogsOpen && !logsContainer) {
+        // Add logs container if missing
+        const logsDiv = document.createElement('div');
+        logsDiv.className = 'queue-logs-container';
+        logsDiv.innerHTML = `
+            <div class="queue-logs-header">
+                <span>Terminal Output</span>
+                <button class="btn-xs" onclick="toggleLogs(${job.id})">Close</button>
             </div>
-        </div>
-        <div class="queue-items-container">
-    `;
-
-    html += sortedQueue.map(job => renderQueueItem(job)).join('');
-    html += '</div>';
-
-    container.innerHTML = html;
+            <div class="queue-logs-terminal" id="logs-${job.id}">
+                <div class="loading-logs">Loading logs...</div>
+            </div>
+        `;
+        el.appendChild(logsDiv);
+        // Trigger fetch immediately
+        fetchLogs(job.id);
+    } else if (!isLogsOpen && logsContainer) {
+        // Remove logs container if closed
+        logsContainer.remove();
+    }
 }
 
 function getPlatformIcon(platform) {
