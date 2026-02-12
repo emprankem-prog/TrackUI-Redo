@@ -667,19 +667,6 @@ def run_download(job):
             if job['status'] == 'paused':
                 process.terminate()
                 job['message'] = 'Download paused'
-                return
-            
-            last_activity = time.time()
-            line = line.strip()
-            
-            # Parse progress from gallery-dl output
-            if line:
-                # Collect error lines for debugging
-                if 'error' in line.lower() or 'Error' in line or 'failed' in line.lower() or 'HTTPError' in line:
-                    error_lines.append(line)
-                    # Keep only last 5 error lines
-                    if len(error_lines) > 5:
-                        error_lines.pop(0)
                 
                 # Check for file download
                 if 'Downloading' in line or '.jpg' in line or '.mp4' in line or '.png' in line:
@@ -697,6 +684,17 @@ def run_download(job):
                     if len(line) > 10:
                         job['message'] = line[:80]
             
+            # Check for stop/pause signals
+            if job['status'] == 'paused':
+                process.terminate()
+                job['message'] = 'Download paused'
+                return
+            elif job['status'] in ['stopped', 'cancelled']:
+                process.terminate()
+                job['message'] = 'Download stopped by user'
+                job['completed_at'] = datetime.now().isoformat()
+                return
+
             # Check timeout
             if time.time() - last_activity > timeout_minutes * 60:
                 process.terminate()
@@ -3701,31 +3699,130 @@ def api_queue():
     
     return jsonify(queue_data)
 
+@app.route('/api/queue/<int:queue_id>/cancel', methods=['POST'])
+def api_cancel_download(queue_id):
+    """Cancel a download"""
+    # Legacy endpoint support
+    return api_stop_download(queue_id)
+
+@app.route('/api/queue/<int:queue_id>/stop', methods=['POST'])
+def api_stop_download(queue_id):
+    """Stop a download"""
+    with queue_lock:
+        for job in download_queue:
+            if job['id'] == queue_id:
+                if job['status'] == 'active':
+                    job['status'] = 'stopped'
+                    if job.get('process'):
+                        try:
+                            job['process'].terminate()
+                        except:
+                            pass
+                    # For GoFile
+                    if job.get('stop_event'):
+                        job['stop_event'].set()
+                elif job['status'] in ['queued', 'paused']:
+                    job['status'] = 'cancelled'
+                    job['completed_at'] = datetime.now().isoformat()
+                    job['message'] = 'Cancelled by user'
+                
+                return jsonify({'success': True, 'status': job['status']})
+    
+    return jsonify({'error': 'Job not found'}), 404
+
 @app.route('/api/queue/<int:queue_id>/pause', methods=['POST'])
-def api_queue_pause(queue_id):
+def api_pause_download(queue_id):
     """Pause a download"""
     with queue_lock:
         for job in download_queue:
-            if job['id'] == queue_id and job['status'] == 'active':
-                job['status'] = 'paused'
-                if job['process']:
-                    job['process'].terminate()
-                return jsonify({'success': True})
+            if job['id'] == queue_id:
+                if job['status'] == 'active':
+                    job['status'] = 'paused'
+                    # Process termination is handled in run_download loop
+                elif job['status'] == 'queued':
+                    job['status'] = 'paused'
+                    job['message'] = 'Paused (was queued)'
+                
+                return jsonify({'success': True, 'status': job['status']})
     
-    return jsonify({'error': 'Job not found or not active'}), 404
+    return jsonify({'error': 'Job not found'}), 404
 
 @app.route('/api/queue/<int:queue_id>/resume', methods=['POST'])
-def api_queue_resume(queue_id):
+def api_resume_download(queue_id):
     """Resume a paused download"""
     with queue_lock:
         for job in download_queue:
-            if job['id'] == queue_id and job['status'] == 'paused':
+            if job['id'] == queue_id:
+                if job['status'] == 'paused':
+                    job['status'] = 'queued'
+                    job['message'] = 'Resuming...'
+                    job['completed_at'] = None # Reset completion time if it was set
+                
+                return jsonify({'success': True, 'status': job['status']})
+    
+    return jsonify({'error': 'Job not found'}), 404
+
+@app.route('/api/queue/stop-all', methods=['POST'])
+def api_stop_all_downloads():
+    """Stop all active and queued downloads"""
+    stopped_count = 0
+    with queue_lock:
+        for job in download_queue:
+            if job['status'] in ['active', 'queued', 'paused']:
+                if job['status'] == 'active':
+                    job['status'] = 'stopped'
+                    if job.get('process'):
+                        try:
+                            job['process'].terminate()
+                        except:
+                            pass
+                    if job.get('stop_event'):
+                        job['stop_event'].set()
+                else:
+                    job['status'] = 'cancelled'
+                    job['completed_at'] = datetime.now().isoformat()
+                    job['message'] = 'Cancelled by user'
+                stopped_count += 1
+    
+    return jsonify({'success': True, 'count': stopped_count})
+
+@app.route('/api/queue/pause-all', methods=['POST'])
+def api_pause_all_downloads():
+    """Pause all active and queued downloads"""
+    paused_count = 0
+    with queue_lock:
+        for job in download_queue:
+            if job['status'] in ['active', 'queued']:
+                job['status'] = 'paused'
+                if job.get('message') == 'Waiting in queue...':
+                     job['message'] = 'Paused'
+                paused_count += 1
+    
+    return jsonify({'success': True, 'count': paused_count})
+
+@app.route('/api/queue/resume-all', methods=['POST'])
+def api_resume_all_downloads():
+    """Resume all paused downloads"""
+    resumed_count = 0
+    with queue_lock:
+        for job in download_queue:
+            if job['status'] == 'paused':
                 job['status'] = 'queued'
                 job['message'] = 'Resuming...'
-                threading.Thread(target=process_queue, daemon=True).start()
-                return jsonify({'success': True})
+                job['completed_at'] = None
+                resumed_count += 1
     
-    return jsonify({'error': 'Job not found or not paused'}), 404
+    return jsonify({'success': True, 'count': resumed_count})
+
+@app.route('/api/queue/clear-completed', methods=['POST'])
+def api_clear_completed_downloads():
+    """Remove completed, failed, and cancelled jobs from queue"""
+    global download_queue
+    with queue_lock:
+        # Keep only active, queued, or paused jobs
+        download_queue = [j for j in download_queue if j['status'] in ['active', 'queued', 'paused']]
+    
+    return jsonify({'success': True})
 
 @app.route('/api/queue/<int:queue_id>', methods=['DELETE'])
 def api_queue_delete(queue_id):

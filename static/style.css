@@ -2383,3 +2383,185 @@ body.debug-mode .debug-only {
         transform: rotate(360deg);
     }
 }
+
+/* =============================================================================
+   Download Queue / Manager (Redesigned)
+   ============================================================================= */
+
+.queue-controls-global {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding-bottom: var(--space-md);
+    margin-bottom: var(--space-md);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.global-actions-left,
+.global-actions-right {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.queue-items-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: var(--space-xs);
+}
+
+.queue-item {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    padding: var(--space-md);
+    position: relative;
+    overflow: hidden;
+    transition: all var(--transition-fast);
+}
+
+.queue-item:hover {
+    border-color: var(--accent-primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.queue-item.status-active {
+    border-left: 4px solid var(--accent-primary);
+}
+
+.queue-item.status-paused {
+    border-left: 4px solid var(--accent-warning);
+    opacity: 0.9;
+}
+
+.queue-item.status-success,
+.queue-item.status-completed {
+    border-left: 4px solid var(--accent-success);
+}
+
+.queue-item.status-error,
+.queue-item.status-failed {
+    border-left: 4px solid var(--accent-danger);
+}
+
+.queue-item.status-cancelled,
+.queue-item.status-stopped {
+    border-left: 4px solid var(--text-muted);
+    opacity: 0.7;
+}
+
+.queue-item-header {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    position: relative;
+    z-index: 2;
+}
+
+.queue-item-icon {
+    font-size: 24px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-elevated);
+    border-radius: var(--border-radius-md);
+    flex-shrink: 0;
+}
+
+.queue-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.queue-item-title {
+    font-weight: 600;
+    font-size: var(--font-size-md);
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.queue-item-platform {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    font-weight: normal;
+}
+
+.queue-item-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+}
+
+.queue-item-actions {
+    display: flex;
+    gap: var(--space-xs);
+    flex-shrink: 0;
+}
+
+.queue-progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.05);
+    z-index: 1;
+}
+
+.queue-progress-bar .progress-fill {
+    height: 100%;
+    background: var(--accent-primary);
+    transition: width 0.3s ease;
+}
+
+.queue-item-message {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    margin-top: var(--space-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.queue-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-2xl);
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.queue-empty .empty-icon {
+    font-size: 48px;
+    margin-bottom: var(--space-md);
+    opacity: 0.5;
+}
+
+.queue-empty .empty-hint {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    margin-top: var(--space-xs);
+}
+
+@keyframes indeterminate {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}
