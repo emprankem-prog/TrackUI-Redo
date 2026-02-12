@@ -2632,43 +2632,6 @@ def group_gallery(group_id):
         stats=total_stats
     )
 
-@app.route('/user/<platform>/<path:username>')
-@login_required
-def user_profile(platform, username):
-    """User profile and media viewer"""
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    # Get user info
-    cursor.execute('''
-        SELECT u.*, GROUP_CONCAT(t.id || ':' || t.name || ':' || t.color) as tags
-        FROM users u
-        LEFT JOIN user_tags ut ON u.id = ut.user_id
-        LEFT JOIN tags t ON ut.tag_id = t.id
-        WHERE u.username = ? AND u.platform = ?
-        GROUP BY u.id
-    ''', (username, platform))
-    user = cursor.fetchone()
-    
-    if not user:
-        return "User not found", 404
-    
-    user = dict(user)
-    
-    # Parse tags
-    if user['tags']:
-        user['tags'] = [
-            {'id': int(t.split(':')[0]), 'name': t.split(':')[1], 'color': t.split(':')[2]}
-            for t in user['tags'].split(',')
-        ]
-    else:
-        user['tags'] = []
-    
-    conn.close()
-    
-    # Get media files
-    media = get_cached_user_media(platform, username)
-
 @lru_cache(maxsize=100)
 def get_cached_user_media(platform, username):
     """
@@ -2743,6 +2706,45 @@ def get_cached_user_media(platform, username):
         media['highlights'][key].sort(key=lambda x: x['filename'])
         
     return media
+
+@app.route('/user/<platform>/<path:username>')
+@login_required
+def user_profile(platform, username):
+    """User profile and media viewer"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Get user info
+    cursor.execute('''
+        SELECT u.*, GROUP_CONCAT(t.id || ':' || t.name || ':' || t.color) as tags
+        FROM users u
+        LEFT JOIN user_tags ut ON u.id = ut.user_id
+        LEFT JOIN tags t ON ut.tag_id = t.id
+        WHERE u.username = ? AND u.platform = ?
+        GROUP BY u.id
+    ''', (username, platform))
+    user = cursor.fetchone()
+    
+    if not user:
+        return "User not found", 404
+    
+    user = dict(user)
+    
+    # Parse tags
+    if user['tags']:
+        user['tags'] = [
+            {'id': int(t.split(':')[0]), 'name': t.split(':')[1], 'color': t.split(':')[2]}
+            for t in user['tags'].split(',')
+        ]
+    else:
+        user['tags'] = []
+    
+    conn.close()
+    
+    # Get media files
+    media = get_cached_user_media(platform, username)
+
+
     
     # Auto-detect profile picture if not set  
     if not user.get('profile_picture'):
