@@ -669,19 +669,21 @@ def run_download(job):
                 job['message'] = 'Download paused'
                 
                 # Check for file download
-                if 'Downloading' in line or '.jpg' in line or '.mp4' in line or '.png' in line:
-                    files_count += 1
-                    job['files_downloaded'] = files_count
-                    job['message'] = f'Downloaded {files_count} files...'
-                elif 'Skipping' in line:
+                line_lower = line.lower()
+                if 'downloading' in line_lower or '.jpg' in line_lower or '.mp4' in line_lower or '.png' in line_lower:
+                    if 'json' not in line_lower and 'info' not in line_lower:
+                        files_count += 1
+                        job['files_downloaded'] = files_count
+                        job['message'] = f'Downloading file {files_count}...'
+                elif 'skipping' in line_lower:
                     skipped_count += 1
                     job['files_skipped'] = skipped_count
                     job['message'] = f'Skipped {skipped_count} (already archived)...'
-                elif 'error' in line.lower() or 'Error' in line:
+                elif 'error' in line_lower:
                     job['message'] = f'Error: {line[:60]}'
                 else:
                     # Show last meaningful line
-                    if len(line) > 10:
+                    if len(line) > 10 and 'info' not in line_lower:
                         job['message'] = line[:80]
             
             # Check for stop/pause signals
@@ -712,11 +714,16 @@ def run_download(job):
                 job['message'] = f'Completed! Downloaded {files_count}, skipped {skipped} (archived)'
             elif skipped > 0:
                 job['message'] = f'Up to date! Skipped {skipped} (already archived)'
-            else:
+            elif files_count > 0:
                 job['message'] = f'Completed! Downloaded {files_count} files'
+            else:
+                job['message'] = 'Completed (no new files found)'
             
             # Update user's last_sync
             update_user_last_sync(username, platform)
+            
+            # Clear media cache so new files show up immediately
+            get_cached_user_media.cache_clear()
             
             # Log success to audit log
             log_action('download_completed', 'user', None, {
@@ -724,21 +731,18 @@ def run_download(job):
                 'files_downloaded': files_count, 'files_skipped': skipped
             })
         else:
-            job['status'] = 'failed'
-            # Store error log and provide more helpful message
-            if error_lines:
-                job['error_log'] = '\n'.join(error_lines)
-                last_error = error_lines[-1][:100]
-                job['message'] = f'Failed (exit {process.returncode}): {last_error}'
+            # Check if it was stopped/cancelled during wait
+            if job['status'] in ['stopped', 'cancelled']:
+                 job['message'] = 'Download stopped by user'
             else:
-                # Common exit codes explanation
-                error_desc = {
-                    1: 'General error',
-                    2: 'Command line syntax error',
-                    4: 'No files found / access denied',
-                    8: 'Connection error'
-                }.get(process.returncode, 'Unknown error')
-                job['message'] = f'Failed: {error_desc} (exit code {process.returncode})'
+                job['status'] = 'failed'
+                # Store error log and provide more helpful message
+                if error_lines:
+                    job['error_log'] = '\n'.join(error_lines)
+                    last_error = error_lines[-1][:100]
+                    job['message'] = f'Failed: {last_error}'
+                else:
+                    job['message'] = f'Failed (exit code {process.returncode})'
         
     except Exception as e:
         job['status'] = 'failed'
@@ -748,6 +752,10 @@ def run_download(job):
         job['completed_at'] = datetime.now().isoformat()
         job['process'] = None
         
+        # STOP HERE if cancelled/stopped - DO NOT RETRY
+        if job['status'] in ['stopped', 'cancelled']:
+            return
+
         # Check for auto-retry on failure
         if job['status'] == 'failed':
             retry_enabled = get_setting('retry_enabled', 'true') == 'true'
@@ -768,6 +776,8 @@ def run_download(job):
                     'username': username, 'platform': platform, 
                     'attempt': retry_count + 1, 'max_retries': max_retries
                 })
+                # Clear cache on failure too just in case partials exist
+                get_cached_user_media.cache_clear()
                 return  # Don't send failure notification yet
         
         # Send notification (Telegram and Discord)
@@ -777,6 +787,9 @@ def run_download(job):
         display_username = username
         if platform == 'coomer' and '/' in username:
             display_username = username.split('/')[1]
+        
+        # Clear cache finally
+        get_cached_user_media.cache_clear()
         
         if job['status'] == 'completed':
             skipped = job.get('files_skipped', 0)
@@ -792,7 +805,6 @@ def run_download(job):
                 )
         else:
             retry_count = job.get('retry_count', 0)
-            max_retries = job.get('max_retries', 3)
             send_notification(
                 f"❌ {emoji} {display_username}: {job['message']}\n"
                 f"(Failed after {retry_count + 1} attempts)"

@@ -918,73 +918,76 @@ function renderQueue() {
     container.innerHTML = html;
 }
 
-function renderQueueItem(job) {
-    const isCompleted = ['completed', 'failed', 'cancelled', 'stopped'].includes(job.status);
-    const progress = job.progress || 0;
-    const files = job.files_downloaded || 0;
-    const skipped = job.files_skipped || 0;
+function getPlatformIcon(platform) {
+    switch (platform) {
+        case 'instagram': return '📸';
+        case 'tiktok': return '🎵';
+        case 'coomer': return '💖';
+        case 'gofile': return '📦';
+        default: return '🌐';
+    }
+}
 
-    let statusIcon = '⏳';
-    let statusClass = 'status-queued';
-
-    if (job.status === 'active') { statusIcon = '🔄'; statusClass = 'status-active'; }
-    else if (job.status === 'paused') { statusIcon = '⏸'; statusClass = 'status-paused'; }
-    else if (job.status === 'completed') { statusIcon = '✅'; statusClass = 'status-success'; }
-    else if (job.status === 'failed') { statusIcon = '❌'; statusClass = 'status-error'; }
-    else if (job.status === 'cancelled' || job.status === 'stopped') { statusIcon = '⏹'; statusClass = 'status-cancelled'; }
-
-    let buttons = '';
-
+function getActionButtons(job) {
     if (job.status === 'active') {
-        buttons = `
+        return `
             <button class="btn-icon" onclick="controlDownload(${job.id}, 'pause')" title="Pause">⏸</button>
-            <button class="btn-icon btn-icon-danger" onclick="controlDownload(${job.id}, 'stop')" title="Stop">⏹</button>
+            <button class="btn-icon btn-danger" onclick="controlDownload(${job.id}, 'stop')" title="Stop">⏹</button>
         `;
     } else if (job.status === 'paused') {
-        buttons = `
+        return `
             <button class="btn-icon" onclick="controlDownload(${job.id}, 'resume')" title="Resume">▶</button>
-            <button class="btn-icon btn-icon-danger" onclick="controlDownload(${job.id}, 'stop')" title="Stop">⏹</button>
+            <button class="btn-icon btn-danger" onclick="controlDownload(${job.id}, 'stop')" title="Stop">⏹</button>
         `;
     } else if (job.status === 'queued') {
-        buttons = `
+        return `
             <button class="btn-icon" onclick="controlDownload(${job.id}, 'pause')" title="Pause">⏸</button>
-            <button class="btn-icon btn-icon-danger" onclick="controlDownload(${job.id}, 'stop')" title="Cancel">🗑</button>
+            <button class="btn-icon btn-danger" onclick="controlDownload(${job.id}, 'stop')" title="Cancel">🗑</button>
         `;
-    } else if (['failed', 'cancelled', 'stopped'].includes(job.status)) {
-        buttons = `
-            <button class="btn-icon" onclick="retryDownload(${job.queue_id || job.id})" title="Retry">🔄</button>
+    } else {
+        // Completed/Failed/Stopped
+        return `
+            <button class="btn-icon" onclick="retryDownload(${job.id})" title="Retry">🔄</button>
         `;
     }
+}
 
-    // Platform Icon
-    let platformIcon = '🌐';
-    if (job.platform === 'instagram') platformIcon = '📸';
-    else if (job.platform === 'tiktok') platformIcon = '🎵';
-    else if (job.platform === 'coomer') platformIcon = '💖';
+// renderQueueItem is defined below
+
+function renderQueueItem(job) {
+    // Calculate progress percentage or use indeterminate state
+    let progressPercent = job.progress || 0;
+    let isIndeterminate = job.status === 'active' && progressPercent === 0;
+
+    // If we have files count but no progress %, we can imply activity
+    // but we can't show specific % width.
 
     return `
-        <div class="queue-item ${statusClass}" data-id="${job.id}">
+        <div class="queue-item" data-id="${job.id}">
             <div class="queue-item-header">
-                <div class="queue-item-icon">${platformIcon}</div>
-                <div class="queue-item-info">
-                    <div class="queue-item-title">${job.username} <span class="queue-item-platform">/ ${job.platform}</span></div>
-                    <div class="queue-item-meta">
-                        <span class="badge badge-${job.status}">${statusIcon} ${job.status.toUpperCase()}</span>
-                        <span>Files: ${files} ${skipped > 0 ? `(+${skipped} skip)` : ''}</span>
-                    </div>
+                <div class="queue-item-title">
+                    <span class="platform-icon">${getPlatformIcon(job.platform)}</span>
+                    <span class="username">${job.username}</span>
+                    <span class="status-badge status-${job.status}">${job.status.toUpperCase()}</span>
                 </div>
-                <div class="queue-item-actions">
-                    ${buttons}
+                <div class="queue-item-meta">
+                    <span class="time">${new Date(job.started_at || Date.now()).toLocaleTimeString()}</span>
+                    ${job.files_downloaded > 0 ? `<span class="files-count">📦 ${job.files_downloaded} files</span>` : ''}
                 </div>
             </div>
             
-            ${!isCompleted ? `
-            <div class="queue-progress-bar">
-                <div class="progress-fill" style="width: ${job.status === 'active' ? '100%' : '0%'}; animation: ${job.status === 'active' ? 'indeterminate 2s infinite linear' : 'none'}"></div>
+            <div class="queue-progress-container">
+                <div class="queue-progress-bar ${isIndeterminate ? 'progress-indeterminate' : ''} ${job.status}" 
+                     style="width: ${isIndeterminate ? '100%' : Math.max(progressPercent, 5) + '%'};">
+                </div>
             </div>
-            ` : ''}
             
-            <div class="queue-item-message" title="${job.message}">${job.message}</div>
+            <div class="queue-item-footer">
+                <div class="queue-message" title="${job.message}">${job.message}</div>
+                <div class="queue-actions">
+                    ${getActionButtons(job)}
+                </div>
+            </div>
         </div>
     `;
 }
