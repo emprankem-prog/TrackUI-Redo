@@ -2379,13 +2379,208 @@ body.debug-mode .debug-only {
 }
 
 @keyframes spin {
+    width: 30%;
+    height: 1px;
+    background: var(--border-color);
+}
+
+.group-members-divider::before {
+    left: 0;
+}
+
+.group-members-divider::after {
+    right: 0;
+}
+
+/* =============================================================================
+   Debug Mode
+   ============================================================================= */
+
+.debug-only {
+    display: none !important;
+}
+
+body.debug-mode .debug-only {
+    display: inline-flex !important;
+}
+
+/* =============================================================================
+   Audit Log
+   ============================================================================= */
+
+.audit-log-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.audit-log-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius-md);
+    border-left: 3px solid var(--accent-primary);
+}
+
+.audit-log-item.action-user_added,
+.audit-log-item.action-download_completed {
+    border-left-color: var(--accent-success);
+}
+
+.audit-log-item.action-user_deleted,
+.audit-log-item.action-download_failed {
+    border-left-color: var(--accent-danger);
+}
+
+.audit-log-item.action-user_archived,
+.audit-log-item.action-download_retry {
+    border-left-color: var(--accent-warning);
+}
+
+.audit-log-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.audit-log-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.audit-log-action {
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+    text-transform: capitalize;
+    margin-bottom: var(--space-xs);
+}
+
+.audit-log-details {
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    word-break: break-word;
+}
+
+.audit-log-time {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* =============================================================================
+   Archived Profiles
+   ============================================================================= */
+
+.user-card.archived {
+    opacity: 0.65;
+    filter: grayscale(30%);
+}
+
+.user-card.archived::after {
+    content: '📦 ARCHIVED';
+    position: absolute;
+    top: var(--space-sm);
+    right: var(--space-sm);
+    background: var(--accent-warning);
+    color: #000;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: var(--border-radius-sm);
+    letter-spacing: 0.5px;
+    z-index: 10;
+}
+
+.user-card.archived:hover {
+    opacity: 1;
+    filter: none;
+}
+
+/* =============================================================================
+   Media Viewer Modal
+   ============================================================================= */
+
+.media-viewer-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: var(--space-md);
+    background: black;
+}
+
+.media-viewer-content img,
+.media-viewer-content video {
+    max-width: 100%;
+    max-height: 85vh;
+    object-fit: contain;
+    border-radius: var(--border-radius-lg);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+}
+
+.modal-close-viewer {
+    position: absolute;
+    top: var(--space-md);
+    right: var(--space-md);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    transition: all var(--transition-fast);
+}
+
+
+/* =============================================================================
+   Pagination / Load More
+   ============================================================================= */
+
+.load-more-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xl) 0;
+    gap: var(--space-md);
+    width: 100%;
+}
+
+.load-more-container .btn {
+    min-width: 200px;
+}
+
+.spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    border-top-color: var(--accent-primary);
+    animation: spin 1s ease-in-out infinite;
+}
+
+.spinner.hidden {
+    display: none;
+}
+
+@keyframes spin {
     to {
         transform: rotate(360deg);
     }
 }
 
 /* =============================================================================
-   Download Queue / Manager (Redesigned)
+   Download Queue / Manager (Redesigned 2.0 - Compact Power User)
    ============================================================================= */
 
 .queue-controls-global {
@@ -2408,20 +2603,22 @@ body.debug-mode .debug-only {
 .queue-items-container {
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
-    max-height: 60vh;
+    gap: 8px;
+    max-height: 65vh;
     overflow-y: auto;
     padding-right: var(--space-xs);
 }
 
+/* Compact Queue Item */
 .queue-item {
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
-    border-radius: var(--border-radius-md);
-    padding: var(--space-md);
+    border-radius: 8px;
     position: relative;
     overflow: hidden;
     transition: all var(--transition-fast);
+    display: flex;
+    flex-direction: column;
 }
 
 .queue-item:hover {
@@ -2430,275 +2627,216 @@ body.debug-mode .debug-only {
     box-shadow: var(--shadow-sm);
 }
 
-.queue-item.status-active {
-    border-left: 4px solid var(--accent-primary);
-}
-
-.queue-item.status-paused {
-    border-left: 4px solid var(--accent-warning);
-    opacity: 0.9;
-}
-
-.queue-item.status-success,
-.queue-item.status-completed {
-    border-left: 4px solid var(--accent-success);
-}
-
-.queue-item.status-error,
-.queue-item.status-failed {
-    border-left: 4px solid var(--accent-danger);
-}
-
-.queue-item.status-cancelled,
-.queue-item.status-stopped {
-    border-left: 4px solid var(--text-muted);
-    opacity: 0.7;
-}
-
-.queue-item-header {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-md);
-    position: relative;
-    z-index: 2;
-}
-
-.queue-item-icon {
-    font-size: 24px;
-    width: 40px;
-    height: 40px;
+.queue-row {
     display: flex;
     align-items: center;
-    justify-content: center;
-    background: var(--bg-elevated);
-    border-radius: var(--border-radius-md);
-    flex-shrink: 0;
+    justify-content: space-between;
+    padding: 10px 14px;
+    gap: 12px;
+    z-index: 2;
+    position: relative;
 }
 
-.queue-item-info {
+.queue-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     flex: 1;
     min-width: 0;
 }
 
-.queue-item-title {
-    font-weight: 600;
-    font-size: var(--font-size-md);
+.queue-details {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+}
+
+.queue-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin-bottom: 2px;
+}
+
+.queue-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.username {
+    font-weight: 600;
+    font-size: 0.9rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.queue-item-platform {
-    font-size: var(--font-size-xs);
-    color: var(--text-muted);
-    font-weight: normal;
-}
-
-.queue-item-meta {
+.platform-icon {
+    font-size: 1.4rem;
+    width: 32px;
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-}
-
-.queue-item-actions {
-    display: flex;
-    gap: var(--space-xs);
+    justify-content: center;
     flex-shrink: 0;
 }
 
-.queue-progress-bar {
+.status-badge {
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+/* Status Colors */
+.status-active .status-badge {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+}
+
+.status-paused .status-badge {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+.status-queued .status-badge {
+    background: rgba(107, 114, 128, 0.2);
+    color: #9ca3af;
+}
+
+.status-completed .status-badge {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+
+.status-failed .status-badge,
+.status-cancelled .status-badge,
+.status-stopped .status-badge {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+.queue-actions-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-shrink: 0;
+}
+
+.queue-message {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+    text-align: right;
+}
+
+.queue-actions {
+    display: flex;
+    gap: 4px;
+}
+
+/* Inline Progress Bar */
+.queue-progress-container {
+    height: 3px;
+    background: rgba(255, 255, 255, 0.05);
+    width: 100%;
     position: absolute;
     bottom: 0;
     left: 0;
-    width: 100%;
-    height: 3px;
-    background: rgba(255, 255, 255, 0.05);
     z-index: 1;
 }
 
-.queue-progress-bar .progress-fill {
+.queue-progress-bar {
     height: 100%;
     background: var(--accent-primary);
     transition: width 0.3s ease;
 }
 
-.queue-item-message {
-    font-size: var(--font-size-xs);
-    color: var(--text-muted);
-    margin-top: var(--space-sm);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.queue-progress-bar.progress-indeterminate {
+    background: linear-gradient(90deg,
+            var(--accent-primary) 0%,
+            var(--text-primary) 50%,
+            var(--accent-primary) 100%);
+    background-size: 200% 100%;
+    animation: gradient-slide 1.5s infinite linear;
 }
 
-.queue-empty {
+/* Log Terminal Styles */
+.queue-logs-container {
+    background: #0f172a;
+    /* Darker terminal bg */
+    border-top: 1px solid var(--border-color);
+    padding: 0;
     display: flex;
     flex-direction: column;
+    animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.queue-logs-header {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 6px 12px;
+    display: flex;
+    justify-content: space-between;
     align-items: center;
-    justify-content: center;
-    padding: var(--space-2xl);
-    text-align: center;
-    color: var(--text-secondary);
-}
-
-.queue-empty .empty-icon {
-    font-size: 48px;
-    margin-bottom: var(--space-md);
-    opacity: 0.5;
-}
-
-.queue-empty .empty-hint {
-    font-size: var(--font-size-xs);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.75rem;
     color: var(--text-muted);
-    margin-top: var(--space-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-@keyframes indeterminate {
-    0% {
-        transform: translateX(-100%);
-    }
+.queue-logs-terminal {
+    padding: 10px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.8rem;
+    color: #e2e8f0;
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.4;
+    scroll-behavior: smooth;
+}
 
-    100% {
-        transform: translateX(100%);
-    }
-} 
- / *   Q u e u e   I t e m   S t y l e s   * /  
- . q u e u e - i t e m   {  
-         b a c k g r o u n d :   v a r ( - - b g - s e c o n d a r y ) ;  
-         b o r d e r - r a d i u s :   1 2 p x ;  
-         p a d d i n g :   1 2 p x ;  
-         m a r g i n - b o t t o m :   1 0 p x ;  
-         b o r d e r :   1 p x   s o l i d   v a r ( - - b o r d e r - c o l o r ) ;  
-         d i s p l a y :   f l e x ;  
-         f l e x - d i r e c t i o n :   c o l u m n ;  
-         g a p :   8 p x ;  
- }  
-  
- . q u e u e - i t e m - h e a d e r   {  
-         d i s p l a y :   f l e x ;  
-         j u s t i f y - c o n t e n t :   s p a c e - b e t w e e n ;  
-         a l i g n - i t e m s :   c e n t e r ;  
- }  
-  
- . q u e u e - i t e m - t i t l e   {  
-         d i s p l a y :   f l e x ;  
-         a l i g n - i t e m s :   c e n t e r ;  
-         g a p :   8 p x ;  
-         f o n t - w e i g h t :   5 0 0 ;  
-         f o n t - s i z e :   0 . 9 5 r e m ;  
- }  
-  
- . p l a t f o r m - i c o n   {  
-         f o n t - s i z e :   1 . 2 r e m ;  
- }  
-  
- . s t a t u s - b a d g e   {  
-         f o n t - s i z e :   0 . 7 r e m ;  
-         p a d d i n g :   2 p x   6 p x ;  
-         b o r d e r - r a d i u s :   4 p x ;  
-         f o n t - w e i g h t :   6 0 0 ;  
- }  
-  
- . s t a t u s - a c t i v e   {   b a c k g r o u n d :   r g b a ( 5 9 ,   1 3 0 ,   2 4 6 ,   0 . 2 ) ;   c o l o r :   # 6 0 a 5 f a ;   }  
- . s t a t u s - p a u s e d   {   b a c k g r o u n d :   r g b a ( 2 4 5 ,   1 5 8 ,   1 1 ,   0 . 2 ) ;   c o l o r :   # f b b f 2 4 ;   }  
- . s t a t u s - q u e u e d   {   b a c k g r o u n d :   r g b a ( 1 0 7 ,   1 1 4 ,   1 2 8 ,   0 . 2 ) ;   c o l o r :   # 9 c a 3 a f ;   }  
- . s t a t u s - c o m p l e t e d   {   b a c k g r o u n d :   r g b a ( 1 6 ,   1 8 5 ,   1 2 9 ,   0 . 2 ) ;   c o l o r :   # 3 4 d 3 9 9 ;   }  
- . s t a t u s - f a i l e d ,   . s t a t u s - c a n c e l l e d ,   . s t a t u s - s t o p p e d   {   b a c k g r o u n d :   r g b a ( 2 3 9 ,   6 8 ,   6 8 ,   0 . 2 ) ;   c o l o r :   # f 8 7 1 7 1 ;   }  
-  
- . q u e u e - i t e m - m e t a   {  
-         d i s p l a y :   f l e x ;  
-         g a p :   1 0 p x ;  
-         f o n t - s i z e :   0 . 8 r e m ;  
-         c o l o r :   v a r ( - - t e x t - s e c o n d a r y ) ;  
- }  
-  
- . q u e u e - p r o g r e s s - c o n t a i n e r   {  
-         h e i g h t :   6 p x ;  
-         b a c k g r o u n d :   r g b a ( 2 5 5 , 2 5 5 , 2 5 5 , 0 . 0 5 ) ;  
-         b o r d e r - r a d i u s :   3 p x ;  
-         o v e r f l o w :   h i d d e n ;  
-         w i d t h :   1 0 0 % ;  
- }  
-  
- . q u e u e - p r o g r e s s - b a r   {  
-         h e i g h t :   1 0 0 % ;  
-         b a c k g r o u n d :   v a r ( - - p r i m a r y ) ;  
-         b o r d e r - r a d i u s :   3 p x ;  
-         t r a n s i t i o n :   w i d t h   0 . 3 s   e a s e ;  
- }  
-  
- . q u e u e - p r o g r e s s - b a r . p r o g r e s s - i n d e t e r m i n a t e   {  
-         w i d t h :   1 0 0 % ;  
-         b a c k g r o u n d :   l i n e a r - g r a d i e n t ( 9 0 d e g ,    
-                 v a r ( - - p r i m a r y )   0 % ,    
-                 v a r ( - - p r i m a r y - h o v e r )   5 0 % ,    
-                 v a r ( - - p r i m a r y )   1 0 0 %  
-         ) ;  
-         b a c k g r o u n d - s i z e :   2 0 0 %   1 0 0 % ;  
-         a n i m a t i o n :   g r a d i e n t - s l i d e   1 . 5 s   i n f i n i t e   l i n e a r ;  
- }  
-  
- . q u e u e - p r o g r e s s - b a r . p a u s e d   {  
-         b a c k g r o u n d :   v a r ( - - w a r n i n g ) ;  
-         a n i m a t i o n :   n o n e ;  
-         o p a c i t y :   0 . 7 ;  
- }  
-  
- . q u e u e - p r o g r e s s - b a r . f a i l e d ,   . q u e u e - p r o g r e s s - b a r . s t o p p e d ,   . q u e u e - p r o g r e s s - b a r . c a n c e l l e d   {  
-         b a c k g r o u n d :   v a r ( - - d a n g e r ) ;  
-         w i d t h :   1 0 0 %   ! i m p o r t a n t ;  
-         o p a c i t y :   0 . 3 ;  
- }  
-  
- . q u e u e - p r o g r e s s - b a r . c o m p l e t e d   {  
-         b a c k g r o u n d :   v a r ( - - s u c c e s s ) ;  
-         w i d t h :   1 0 0 %   ! i m p o r t a n t ;  
- }  
-  
- @ k e y f r a m e s   g r a d i e n t - s l i d e   {  
-         0 %   {   b a c k g r o u n d - p o s i t i o n :   1 0 0 %   0 ;   }  
-         1 0 0 %   {   b a c k g r o u n d - p o s i t i o n :   - 1 0 0 %   0 ;   }  
- }  
-  
- . q u e u e - i t e m - f o o t e r   {  
-         d i s p l a y :   f l e x ;  
-         j u s t i f y - c o n t e n t :   s p a c e - b e t w e e n ;  
-         a l i g n - i t e m s :   c e n t e r ;  
-         f o n t - s i z e :   0 . 8 5 r e m ;  
- }  
-  
- . q u e u e - m e s s a g e   {  
-         c o l o r :   v a r ( - - t e x t - s e c o n d a r y ) ;  
-         w h i t e - s p a c e :   n o w r a p ;  
-         o v e r f l o w :   h i d d e n ;  
-         t e x t - o v e r f l o w :   e l l i p s i s ;  
-         m a x - w i d t h :   6 0 % ;  
- }  
-  
- . q u e u e - a c t i o n s   {  
-         d i s p l a y :   f l e x ;  
-         g a p :   4 p x ;  
- }  
-  
- . b t n - i c o n   {  
-         b a c k g r o u n d :   n o n e ;  
-         b o r d e r :   n o n e ;  
-         c o l o r :   v a r ( - - t e x t - p r i m a r y ) ;  
-         c u r s o r :   p o i n t e r ;  
-         p a d d i n g :   4 p x   8 p x ;  
-         b o r d e r - r a d i u s :   4 p x ;  
-         t r a n s i t i o n :   b a c k g r o u n d   0 . 2 s ;  
- }  
-  
- . b t n - i c o n : h o v e r   {  
-         b a c k g r o u n d :   r g b a ( 2 5 5 , 2 5 5 , 2 5 5 , 0 . 1 ) ;  
- }  
-  
- . b t n - i c o n . b t n - d a n g e r : h o v e r   {  
-         b a c k g r o u n d :   r g b a ( 2 3 9 ,   6 8 ,   6 8 ,   0 . 2 ) ;  
-         c o l o r :   # f 8 7 1 7 1 ;  
- }  
- 
+.queue-logs-terminal div {
+    word-break: break-all;
+}
+
+.loading-logs {
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 10px;
+}
+
+.btn-xs {
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 3px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.btn-xs:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: var(--text-primary);
+}

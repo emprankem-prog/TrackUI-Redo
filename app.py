@@ -482,7 +482,8 @@ def add_to_queue(username, platform, url=None, folder=None, password=None, retry
         'files_downloaded': 0,
         'files_skipped': 0,  # Track skipped files for incremental sync feedback
         'retry_count': retry_count,
-        'max_retries': max_retries
+        'max_retries': max_retries,
+        'logs': []
     }
     
     with queue_lock:
@@ -492,6 +493,31 @@ def add_to_queue(username, platform, url=None, folder=None, password=None, retry
     threading.Thread(target=process_queue, daemon=True).start()
     
     return job['id']
+
+def append_log(job, message):
+    """Append message to job logs, keeping only last 100 lines"""
+    if 'logs' not in job:
+        job['logs'] = []
+    
+    timestamp = datetime.now().strftime('%H:%M:%S')
+    log_entry = f"[{timestamp}] {message}"
+    
+    job['logs'].append(log_entry)
+    if len(job['logs']) > 150:
+        job['logs'] = job['logs'][-150:]
+
+@app.route('/api/queue/<int:queue_id>/logs')
+def api_queue_logs(queue_id):
+    """Get logs for a specific job"""
+    with queue_lock:
+        job = next((j for j in download_queue if j['id'] == queue_id), None)
+        if not job:
+            return jsonify({'error': 'Job not found'}), 404
+        return jsonify({
+            'id': job['id'],
+            'logs': job.get('logs', []),
+            'status': job['status']
+        })
 
 def process_queue():
     """Process download queue"""
@@ -664,36 +690,37 @@ def run_download(job):
         error_lines = []  # Collect error output for debugging
         
         for line in iter(process.stdout.readline, ''):
-            if job['status'] == 'paused':
-                process.terminate()
-                job['message'] = 'Download paused'
-                
-                # Check for file download
-                line_lower = line.lower()
-                if 'downloading' in line_lower or '.jpg' in line_lower or '.mp4' in line_lower or '.png' in line_lower:
-                    if 'json' not in line_lower and 'info' not in line_lower:
-                        files_count += 1
-                        job['files_downloaded'] = files_count
-                        job['message'] = f'Downloading file {files_count}...'
-                elif 'skipping' in line_lower:
-                    skipped_count += 1
-                    job['files_skipped'] = skipped_count
-                    job['message'] = f'Skipped {skipped_count} (already archived)...'
-                elif 'error' in line_lower:
-                    job['message'] = f'Error: {line[:60]}'
-                else:
-                    # Show last meaningful line
-                    if len(line) > 10 and 'info' not in line_lower:
-                        job['message'] = line[:80]
+            # Log the raw line
+            append_log(job, line.strip())
+            
+            # Check for file download
+            line_lower = line.lower()
+            if 'downloading' in line_lower or '.jpg' in line_lower or '.mp4' in line_lower or '.png' in line_lower:
+                if 'json' not in line_lower and 'info' not in line_lower:
+                    files_count += 1
+                    job['files_downloaded'] = files_count
+                    job['message'] = f'Downloading file {files_count}...'
+            elif 'skipping' in line_lower:
+                skipped_count += 1
+                job['files_skipped'] = skipped_count
+                job['message'] = f'Skipped {skipped_count} (already archived)...'
+            elif 'error' in line_lower:
+                job['message'] = f'Error: {line[:60]}'
+            else:
+                # Show last meaningful line
+                if len(line) > 10 and 'info' not in line_lower:
+                    job['message'] = line[:80]
             
             # Check for stop/pause signals
             if job['status'] == 'paused':
                 process.terminate()
                 job['message'] = 'Download paused'
+                append_log(job, 'Download paused')
                 return
             elif job['status'] in ['stopped', 'cancelled']:
                 process.terminate()
                 job['message'] = 'Download stopped by user'
+                append_log(job, 'Download stopped by user')
                 job['completed_at'] = datetime.now().isoformat()
                 return
 
@@ -702,6 +729,7 @@ def run_download(job):
                 process.terminate()
                 job['status'] = 'failed'
                 job['message'] = f'Timeout after {timeout_minutes} minutes of inactivity'
+                append_log(job, f'Timeout after {timeout_minutes} minutes of inactivity')
                 job['completed_at'] = datetime.now().isoformat()
                 return
         
@@ -825,6 +853,7 @@ def run_gofile_download(job, output_dir, url):
     def progress_callback(message, files_downloaded, total_files):
         """Callback to update job status"""
         job['message'] = message
+        append_log(job, message)
         job['files_downloaded'] = files_downloaded
         if total_files > 0:
             job['progress'] = (files_downloaded / total_files) * 100
@@ -928,9 +957,13 @@ def run_tiktok_download(job, output_dir, url, cookie_file, username):
         timeout_minutes = 10
         
         for line in iter(process.stdout.readline, ''):
+            # Log raw line
+            append_log(job, line.strip())
+
             if job['status'] == 'paused':
                 process.terminate()
                 job['message'] = 'Download paused'
+                append_log(job, 'Download paused by user')
                 return
             
             last_activity = time.time()
@@ -966,6 +999,7 @@ def run_tiktok_download(job, output_dir, url, cookie_file, username):
                 process.terminate()
                 job['status'] = 'failed'
                 job['message'] = f'Timeout after {timeout_minutes} minutes'
+                append_log(job, f'Timeout after {timeout_minutes} minutes')
                 job['completed_at'] = datetime.now().isoformat()
                 return
         

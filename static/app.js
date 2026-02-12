@@ -929,13 +929,17 @@ function getPlatformIcon(platform) {
 }
 
 function getActionButtons(job) {
+    const logBtn = `<button class="btn-icon" onclick="toggleLogs(${job.id})" title="View Logs">📝</button>`;
+
     if (job.status === 'active') {
         return `
+            ${logBtn}
             <button class="btn-icon" onclick="controlDownload(${job.id}, 'pause')" title="Pause">⏸</button>
             <button class="btn-icon btn-danger" onclick="controlDownload(${job.id}, 'stop')" title="Stop">⏹</button>
         `;
     } else if (job.status === 'paused') {
         return `
+            ${logBtn}
             <button class="btn-icon" onclick="controlDownload(${job.id}, 'resume')" title="Resume">▶</button>
             <button class="btn-icon btn-danger" onclick="controlDownload(${job.id}, 'stop')" title="Stop">⏹</button>
         `;
@@ -947,32 +951,82 @@ function getActionButtons(job) {
     } else {
         // Completed/Failed/Stopped
         return `
+            ${logBtn}
             <button class="btn-icon" onclick="retryDownload(${job.id})" title="Retry">🔄</button>
         `;
     }
 }
 
-// renderQueueItem is defined below
+// Track open log windows
+const openLogs = new Set();
+
+function toggleLogs(id) {
+    if (openLogs.has(id)) {
+        openLogs.delete(id);
+    } else {
+        openLogs.add(id);
+        fetchLogs(id);
+    }
+    renderQueue();
+}
+
+async function fetchLogs(id) {
+    if (!openLogs.has(id)) return;
+
+    try {
+        const response = await fetch(`/api/queue/${id}/logs`);
+        const data = await response.json();
+
+        const logContainer = document.getElementById(`logs-${id}`);
+        if (logContainer) {
+            logContainer.innerHTML = data.logs.map(line => `<div>${escapeHtml(line)}</div>`).join('');
+            // Auto scroll to bottom
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // Keep polling if logs are open and job is active
+        if (openLogs.has(id) && ['active', 'queued'].includes(data.status)) {
+            setTimeout(() => fetchLogs(id), 1000);
+        }
+    } catch (e) {
+        console.error('Failed to fetch logs', e);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
 function renderQueueItem(job) {
     // Calculate progress percentage or use indeterminate state
     let progressPercent = job.progress || 0;
     let isIndeterminate = job.status === 'active' && progressPercent === 0;
-
-    // If we have files count but no progress %, we can imply activity
-    // but we can't show specific % width.
+    let isLogsOpen = openLogs.has(job.id);
 
     return `
-        <div class="queue-item" data-id="${job.id}">
-            <div class="queue-item-header">
-                <div class="queue-item-title">
+        <div class="queue-item status-${job.status}" data-id="${job.id}">
+            <div class="queue-row">
+                <div class="queue-info">
                     <span class="platform-icon">${getPlatformIcon(job.platform)}</span>
-                    <span class="username">${job.username}</span>
-                    <span class="status-badge status-${job.status}">${job.status.toUpperCase()}</span>
+                    <div class="queue-details">
+                        <div class="queue-header">
+                            <span class="username">${job.username}</span>
+                            <span class="status-badge status-${job.status}">${job.status.toUpperCase()}</span>
+                        </div>
+                        <div class="queue-meta">
+                            <span class="time">${new Date(job.started_at || Date.now()).toLocaleTimeString()}</span>
+                            ${job.files_downloaded > 0 ? `<span class="files-count">📦 ${job.files_downloaded} files</span>` : ''}
+                        </div>
+                    </div>
                 </div>
-                <div class="queue-item-meta">
-                    <span class="time">${new Date(job.started_at || Date.now()).toLocaleTimeString()}</span>
-                    ${job.files_downloaded > 0 ? `<span class="files-count">📦 ${job.files_downloaded} files</span>` : ''}
+                
+                <div class="queue-actions-wrapper">
+                     <div class="queue-message" title="${job.message}">${job.message}</div>
+                     <div class="queue-actions">
+                        ${getActionButtons(job)}
+                    </div>
                 </div>
             </div>
             
@@ -982,12 +1036,17 @@ function renderQueueItem(job) {
                 </div>
             </div>
             
-            <div class="queue-item-footer">
-                <div class="queue-message" title="${job.message}">${job.message}</div>
-                <div class="queue-actions">
-                    ${getActionButtons(job)}
+            ${isLogsOpen ? `
+                <div class="queue-logs-container">
+                    <div class="queue-logs-header">
+                        <span>Terminal Output</span>
+                        <button class="btn-xs" onclick="toggleLogs(${job.id})">Close</button>
+                    </div>
+                    <div class="queue-logs-terminal" id="logs-${job.id}">
+                        <div class="loading-logs">Loading logs...</div>
+                    </div>
                 </div>
-            </div>
+            ` : ''}
         </div>
     `;
 }
